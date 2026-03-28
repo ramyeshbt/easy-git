@@ -150,7 +150,7 @@ _do_switch() {
       success "Switched to '${BOLD}${target}${RESET}'"
     fi
   else
-    run_cmd git checkout -- "$target"
+    run_cmd git checkout "$target"
     success "Switched to '${BOLD}${target}${RESET}'"
   fi
 }

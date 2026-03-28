@@ -20,7 +20,7 @@ HASH_BEFORE=$(git rev-parse HEAD)
 # ─── undo commit --soft ──────────────────────────────────────────────────────
 echo "y" | undo_commit --soft 2>/dev/null || true
 assert_eq "soft undo: HEAD moved back" \
-  "0" "$(git rev-list --count HEAD..${HASH_BEFORE} 2>/dev/null || echo 0)"
+  "1" "$(git rev-list --count HEAD..${HASH_BEFORE} 2>/dev/null || echo 0)"
 
 CURRENT_HEAD=$(git rev-parse HEAD)
 assert_not_contains "soft undo: HEAD changed" "$HASH_BEFORE" "$CURRENT_HEAD"

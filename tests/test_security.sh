@@ -71,7 +71,10 @@ assert_not_contains "undo file: path traversal rejected" "root:" "$output"
 
 # ─── Eval absence check ──────────────────────────────────────────────────────
 
-eval_count=$(grep -c 'eval ' "${SCRIPT_DIR}/../lib/"*.sh "${SCRIPT_DIR}/../bin/g" 2>/dev/null || echo 0)
+eval_count=0
+if grep -ql 'eval ' "${SCRIPT_DIR}/../lib/"*.sh "${SCRIPT_DIR}/../bin/g" 2>/dev/null; then
+  eval_count=1
+fi
 assert_eq "no eval in any script" "0" "$eval_count"
 
 # ─── -- separator presence checks ────────────────────────────────────────────
