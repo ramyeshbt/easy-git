@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+# bin/g — Easy Git Tool — main entry point
+# Routes subcommands to lib/*.sh implementations
+
+set -euo pipefail
+
+# Resolve the real directory of this script (handles symlinks)
+_SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null || echo "${BASH_SOURCE[0]}")")" && pwd)"
+LIB_DIR="${_SCRIPT_DIR}/../lib"
+
+# Source core utilities
+source "${LIB_DIR}/core.sh"
+
+# ─── Version ─────────────────────────────────────────────────────────────────
+G_VERSION="1.0.0"
+
+# ─── Subcommand aliases ───────────────────────────────────────────────────────
+dispatch() {
+  local cmd="${1:-}"
+  shift || true
+
+  case "$cmd" in
+    # Core subcommands
+    commit|c)              source "${LIB_DIR}/commit.sh";   main_commit "$@" ;;
+    push|p)                source "${LIB_DIR}/push.sh";     main_push "$@" ;;
+    sync|sy)               source "${LIB_DIR}/sync.sh";     main_sync "$@" ;;
+    branch|b)              source "${LIB_DIR}/branch.sh";   main_branch "$@" ;;
+    log|l)                 source "${LIB_DIR}/log.sh";      main_log "$@" ;;
+    status|s|st)           source "${LIB_DIR}/status.sh";   main_status "$@" ;;
+    undo|u)                source "${LIB_DIR}/undo.sh";     main_undo "$@" ;;
+    stash)                 source "${LIB_DIR}/stash.sh";    main_stash "$@" ;;
+    clean|cl)              source "${LIB_DIR}/clean.sh";    main_clean "$@" ;;
+    search|sr|find)        source "${LIB_DIR}/search.sh";   main_search "$@" ;;
+    pr)                    source "${LIB_DIR}/pr.sh";       main_pr "$@" ;;
+    # Expanded subcommands
+    diff|d)                source "${LIB_DIR}/diff.sh";     main_diff "$@" ;;
+    revert|rv)             source "${LIB_DIR}/revert.sh";   main_revert "$@" ;;
+    tag|t)                 source "${LIB_DIR}/tag.sh";      main_tag "$@" ;;
+    conflict|cf)           source "${LIB_DIR}/conflict.sh"; main_conflict "$@" ;;
+    ignore|gi)             source "${LIB_DIR}/ignore.sh";   main_ignore "$@" ;;
+    squash|sq)             source "${LIB_DIR}/squash.sh";   main_squash "$@" ;;
+    blame|bl)              source "${LIB_DIR}/blame.sh";    main_blame "$@" ;;
+    reflog|rl)             source "${LIB_DIR}/reflog.sh";   main_reflog "$@" ;;
+    fixup|fx)              source "${LIB_DIR}/fixup.sh";    main_fixup "$@" ;;
+
+    # Meta
+    --version|-V)       echo "g (easy-git) v${G_VERSION}" ;;
+    --doctor)           run_doctor ;;
+    help|-h|--help|"")  show_help ;;
+
+    # Pass-through anything unknown to real git
+    *)
+      if has_cmd git; then
+        git "$cmd" "$@"
+      else
+        die "Unknown command: '$cmd'. Run 'g --help' for available commands."
+      fi
+      ;;
+  esac
+}
+
+# ─── Doctor — dependency check ───────────────────────────────────────────────
+run_doctor() {
+  header "g doctor — dependency check"
+  echo ""
+
+  # Required
+  local all_ok=1
+  _check_dep git "required" "https://git-scm.com"
+  _check_dep bash "required" "system"
+
+  echo ""
+
+  # Optional
+  _check_dep fzf "optional — enables fuzzy search" "brew install fzf / apt install fzf"
+  _check_dep gh "optional — enables PR creation" "https://cli.github.com"
+  _check_dep delta "optional — better diff output" "brew install git-delta"
+
+  echo ""
+
+  # Git config
+  local git_name git_email
+  git_name=$(git config --global user.name 2>/dev/null || echo "")
+  git_email=$(git config --global user.email 2>/dev/null || echo "")
+
+  if [ -z "$git_name" ] || [ -z "$git_email" ]; then
+    echo -e "${YELLOW}⚠${RESET}  Git identity not set. Run:"
+    echo -e "    git config --global user.name  \"Your Name\""
+    echo -e "    git config --global user.email \"you@example.com\""
+  else
+    echo -e "${GREEN}✓${RESET}  Git identity: ${DIM}${git_name} <${git_email}>${RESET}"
+  fi
+
+  echo ""
+  echo -e "${DIM}g version: ${G_VERSION}${RESET}"
+}
+
+_check_dep() {
+  local cmd="$1" importance="$2" install_hint="$3"
+  if has_cmd "$cmd"; then
+    local version
+    version=$("$cmd" --version 2>/dev/null | head -1 || echo "installed")
+    echo -e "${GREEN}✓${RESET}  ${BOLD}${cmd}${RESET} — ${DIM}${version}${RESET}"
+  else
+    if [ "$importance" = "required" ]; then
+      echo -e "${RED}✗${RESET}  ${BOLD}${cmd}${RESET} — ${RED}NOT FOUND${RESET} (${importance}) — install: ${install_hint}"
+    else
+      echo -e "${DIM}○  ${cmd} — not installed (${importance}) — ${install_hint}${RESET}"
+    fi
+  fi
+}
+
+# ─── Help ────────────────────────────────────────────────────────────────────
+show_help() {
+  cat <<EOF
+${BOLD}g${RESET} — Easy Git v${G_VERSION}
+
+${BOLD}USAGE${RESET}
+  g <command> [flags]
+
+${BOLD}DAILY COMMANDS${RESET}
+  ${CYAN}commit${RESET}   c    Interactive conventional commit (staged + message builder)
+  ${CYAN}push${RESET}     p    Push with auto-upstream + PR creation
+  ${CYAN}sync${RESET}     sy   Sync with main (stash → fetch → rebase → restore)
+  ${CYAN}status${RESET}   s    Enhanced status with context-aware hints
+  ${CYAN}diff${RESET}     d    Diff: unstaged / staged / vs-branch
+  ${CYAN}log${RESET}      l    Pretty colored graph log
+
+${BOLD}BRANCHING & HISTORY${RESET}
+  ${CYAN}branch${RESET}   b    Create / switch / delete branches (fuzzy search)
+  ${CYAN}squash${RESET}   sq   Squash WIP commits before merging
+  ${CYAN}revert${RESET}   rv   Safely undo a pushed commit (new revert commit)
+  ${CYAN}tag${RESET}      t    Create / list / delete release tags
+
+${BOLD}FIXES & RECOVERY${RESET}
+  ${CYAN}undo${RESET}     u    Safe undo — commit / push / file (with preview)
+  ${CYAN}fixup${RESET}    fx   Create a fixup commit for code review changes
+  ${CYAN}conflict${RESET} cf   Guided merge conflict resolution
+  ${CYAN}reflog${RESET}   rl   Show reflog; recover lost commits or branches
+
+${BOLD}RESEARCH & HOUSEKEEPING${RESET}
+  ${CYAN}search${RESET}   sr   Search commit messages and code changes
+  ${CYAN}blame${RESET}    bl   See who wrote each line of a file
+  ${CYAN}stash${RESET}         Named stash management (save / pop / list / drop)
+  ${CYAN}clean${RESET}    cl   Remove merged + gone branches
+  ${CYAN}ignore${RESET}   gi   Add / manage .gitignore entries
+  ${CYAN}pr${RESET}            Open or create pull requests (requires gh)
+
+${BOLD}META${RESET}
+  --doctor      Check dependencies and git config
+  --version     Show version
+  --help        Show this help
+
+${BOLD}PASS-THROUGH${RESET}
+  Any unknown command is passed directly to git:
+  g diff, g rebase, g cherry-pick, etc.
+
+${BOLD}EXAMPLES${RESET}
+  g s                    # Status
+  g c                    # Interactive commit
+  g p                    # Push + optional PR
+  g b feat/my-feature    # Create + switch to branch
+  g sy                   # Sync with main
+  g d --staged           # What's about to be committed
+  g l                    # Pretty log
+  g undo                 # Safe undo menu
+  g revert abc123        # Undo a pushed commit (safe)
+  g conflict             # Guide through merge conflicts
+  g squash --all         # Squash WIP commits before PR
+  g tag v1.2.0 --push    # Tag a release
+  g ignore .env          # Add to .gitignore
+  g reflog --recover     # Recover lost work
+  g blame src/auth.js    # Who wrote this?
+  g search "auth bug"    # Search commit history
+
+${BOLD}FLAGS ON ALL COMMANDS${RESET}
+  -h, --help    Show command-specific help
+
+${DIM}Set G_DRY_RUN=1 to preview commands without executing them.${RESET}
+EOF
+}
+
+# ─── Entry point ─────────────────────────────────────────────────────────────
+dispatch "$@"
