@@ -1,0 +1,272 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  # 1. Bash syntax check  (fast gate — all other jobs wait on this)
+  # ────────────────────────────────────────────────────────────────────────────
+  syntax:
+    name: Syntax Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: bin/g
+        run: bash -n bin/g
+
+      - name: lib/*.sh
+        run: |
+          fail=0
+          for f in lib/*.sh; do
+            bash -n "$f" || { echo "✗  Syntax error: $f"; fail=1; }
+          done
+          exit $fail
+
+      - name: tests/*.sh
+        run: |
+          fail=0
+          for f in tests/*.sh; do
+            bash -n "$f" || { echo "✗  Syntax error: $f"; fail=1; }
+          done
+          exit $fail
+
+      - name: install.sh / uninstall.sh
+        run: |
+          bash -n install.sh
+          bash -n uninstall.sh
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # 2. ShellCheck static analysis
+  # ────────────────────────────────────────────────────────────────────────────
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install ShellCheck
+        run: sudo apt-get install -y shellcheck
+
+      - name: Check bin/g and lib/*.sh
+        # SC1090/SC1091: dynamic `source "$(dirname ...)/core.sh"` — expected pattern
+        run: shellcheck -S warning -e SC1090,SC1091 bin/g lib/*.sh
+
+      - name: Check install.sh and uninstall.sh
+        run: shellcheck -S warning install.sh uninstall.sh
+
+      - name: Check tests/*.sh
+        run: shellcheck -S warning -e SC1090,SC1091 tests/*.sh
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # 3. Bash 3.2 portability — no bash 4+ features
+  # ────────────────────────────────────────────────────────────────────────────
+  portability:
+    name: Bash 3.2 Portability
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Detect bash 4+ syntax
+        run: |
+          fail=0
+
+          # Case conversion: ${var,} ${var,,} ${var^} ${var^^}  (bash 4+)
+          if grep -rEn '\$\{[A-Za-z_][A-Za-z0-9_]*(,+|\^+)\}' lib/ bin/g 2>/dev/null; then
+            echo "ERROR: bash 4+ case conversion found — use 'tr' instead"
+            fail=1
+          fi
+
+          # Associative arrays: declare -A  (bash 4+)
+          if grep -rn 'declare -A' lib/ bin/g 2>/dev/null; then
+            echo "ERROR: associative array (bash 4+) — not supported on macOS bash 3.2"
+            fail=1
+          fi
+
+          # readarray / mapfile  (bash 4+)
+          if grep -rEn '\breadarray\b|\bmapfile\b' lib/ bin/g 2>/dev/null; then
+            echo "ERROR: readarray/mapfile (bash 4+) found"
+            fail=1
+          fi
+
+          # co-process  (bash 4+)
+          if grep -rn '\bcoproc\b' lib/ bin/g 2>/dev/null; then
+            echo "ERROR: coproc (bash 4+) found"
+            fail=1
+          fi
+
+          [ $fail -eq 0 ] && echo "✓  No bash 4+ features detected"
+          exit $fail
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # 4. Full test suite — ubuntu (bash 5) + macOS (bash 3.2)
+  # ────────────────────────────────────────────────────────────────────────────
+  test:
+    name: Tests / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    needs: [syntax]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show bash version
+        run: bash --version | head -1
+
+      - name: Configure git identity
+        run: |
+          git config --global user.name "CI Test User"
+          git config --global user.email "ci@example.com"
+          git config --global init.defaultBranch main
+          git config --global core.autocrlf false
+          git config --global commit.gpgsign false
+
+      - name: Run full test suite
+        run: VERBOSE=1 bash tests/run_tests.sh
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # 5. Security regression tests + static pattern audit
+  # ────────────────────────────────────────────────────────────────────────────
+  security:
+    name: Security / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    needs: [syntax]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure git
+        run: |
+          git config --global user.name "CI Test User"
+          git config --global user.email "ci@example.com"
+          git config --global init.defaultBranch main
+          git config --global commit.gpgsign false
+
+      - name: Run security regression test suite
+        run: bash tests/test_security.sh
+
+      - name: Audit for dangerous patterns
+        run: |
+          fail=0
+
+          # No eval — command injection risk
+          if grep -rn '\beval\b' lib/ bin/g 2>/dev/null; then
+            echo "ERROR: 'eval' found in scripts"
+            fail=1
+          fi
+
+          # No hardcoded home paths
+          if grep -rEn '"/home/[^$]|"/Users/[^$]' lib/ bin/g 2>/dev/null; then
+            echo "ERROR: hardcoded user path found (use \$HOME)"
+            fail=1
+          fi
+
+          # No git push --force (only --force-with-lease allowed)
+          if grep -rEn 'git push.*--force([^-]|$)' lib/ bin/g 2>/dev/null; then
+            echo "ERROR: 'git push --force' found — use --force-with-lease"
+            fail=1
+          fi
+
+          # No git reset --hard without the safety guard pattern
+          if grep -rEn "git reset --hard" lib/ bin/g 2>/dev/null | grep -v "confirm\|dry.run\|G_DRY_RUN"; then
+            echo "WARNING: 'git reset --hard' found outside of confirmed/dry-run context"
+          fi
+
+          # No -- separator missing before user-supplied refs (spot check key commands)
+          # This is informational — full coverage is in test_security.sh
+          echo "✓  Static pattern audit complete"
+          exit $fail
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # 6. Install / uninstall script validation
+  # ────────────────────────────────────────────────────────────────────────────
+  install:
+    name: Install Script / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    needs: [syntax]
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run install.sh
+        run: bash install.sh
+
+      - name: Verify bin/g is executable
+        run: test -x bin/g
+
+      - name: Verify g --version works
+        run: PATH="$PWD/bin:$PATH" bash bin/g --version
+
+      - name: Verify g --help works
+        run: PATH="$PWD/bin:$PATH" bash bin/g --help
+
+      - name: Run install.sh again (idempotency)
+        run: |
+          bash install.sh
+          # PATH entry must not be duplicated
+          count=$(grep -c "easy-git" ~/.bashrc 2>/dev/null || grep -c "easy-git" ~/.profile 2>/dev/null || echo 0)
+          if [ "$count" -gt 2 ]; then
+            echo "ERROR: install.sh is not idempotent — found $count easy-git entries"
+            exit 1
+          fi
+          echo "✓  Idempotency check passed"
+
+      - name: Run uninstall.sh
+        run: bash uninstall.sh
+
+      - name: Verify PATH entry was removed
+        run: |
+          if grep -q "easy-git" ~/.bashrc 2>/dev/null || grep -q "easy-git" ~/.profile 2>/dev/null || grep -q "easy-git" ~/.zshrc 2>/dev/null; then
+            echo "ERROR: easy-git PATH entry still present after uninstall"
+            exit 1
+          fi
+          echo "✓  PATH entry removed by uninstall.sh"
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # 7. Dry-run mode smoke test
+  # ────────────────────────────────────────────────────────────────────────────
+  dry-run:
+    name: Dry-Run Mode
+    runs-on: ubuntu-latest
+    needs: [syntax]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure git
+        run: |
+          git config --global user.name "CI"
+          git config --global user.email "ci@example.com"
+          git config --global init.defaultBranch main
+          git config --global commit.gpgsign false
+
+      - name: Smoke-test G_DRY_RUN=1 on core subcommands
+        run: |
+          tmpdir=$(mktemp -d)
+          trap 'rm -rf "$tmpdir"' EXIT
+
+          cd "$tmpdir"
+          git init --quiet
+          git commit --allow-empty -m "init" --quiet
+          echo "hello" > file.txt
+          git add file.txt
+
+          # These should print [dry-run] lines instead of executing
+          G_DRY_RUN=1 bash "$GITHUB_WORKSPACE/bin/g" status
+          G_DRY_RUN=1 bash "$GITHUB_WORKSPACE/bin/g" log
+          G_DRY_RUN=1 bash "$GITHUB_WORKSPACE/bin/g" diff || true
+          echo "✓  Dry-run mode completed without errors"

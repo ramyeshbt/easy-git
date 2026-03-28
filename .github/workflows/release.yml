@@ -1,0 +1,123 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v[0-9]*"
+
+permissions:
+  contents: write
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  # 1. Full validation before releasing
+  # ────────────────────────────────────────────────────────────────────────────
+  validate:
+    name: Validate / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: true
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show bash version
+        run: bash --version | head -1
+
+      - name: Syntax check
+        run: |
+          bash -n bin/g
+          for f in lib/*.sh install.sh uninstall.sh; do bash -n "$f"; done
+
+      - name: Configure git
+        run: |
+          git config --global user.name "CI"
+          git config --global user.email "ci@example.com"
+          git config --global init.defaultBranch main
+          git config --global commit.gpgsign false
+
+      - name: Full test suite
+        run: VERBOSE=1 bash tests/run_tests.sh
+
+      - name: Security tests
+        run: bash tests/test_security.sh
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # 2. Create GitHub Release
+  # ────────────────────────────────────────────────────────────────────────────
+  release:
+    name: Create Release
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Build changelog
+        id: changelog
+        run: |
+          prev_tag=$(git tag --sort=-version:refname | grep -v "^${GITHUB_REF_NAME}$" | head -1 || true)
+
+          if [ -n "$prev_tag" ]; then
+            log=$(git log "${prev_tag}..HEAD" --pretty=format:"- %s (%h)" --no-merges)
+          else
+            log=$(git log --pretty=format:"- %s (%h)" --no-merges | head -40)
+          fi
+
+          {
+            echo "log<<EOF"
+            echo "$log"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Determine pre-release
+        id: prerelease
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if echo "$tag" | grep -qE '\-(alpha|beta|rc)'; then
+            echo "value=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "easy-git ${{ steps.version.outputs.version }}"
+          prerelease: ${{ steps.prerelease.outputs.value }}
+          files: |
+            install.sh
+            uninstall.sh
+          body: |
+            ## easy-git ${{ steps.version.outputs.version }}
+
+            ### Changes
+            ${{ steps.changelog.outputs.log }}
+
+            ---
+
+            ### Installation
+
+            ```bash
+            git clone https://github.com/${{ github.repository }}.git
+            cd easy-git
+            bash install.sh
+            ```
+
+            Or update an existing install:
+
+            ```bash
+            cd easy-git
+            git pull
+            bash install.sh
+            ```
+
+            ### Requirements
+            - Bash 3.2+ (macOS compatible)
+            - Git 2.0+
