@@ -35,9 +35,12 @@ git commit --quiet -m "feat: re-add file1"
 # ─── undo commit (mixed) ─────────────────────────────────────────────────────
 echo "y" | undo_commit 2>/dev/null || true
 STAGED=$(git diff --cached --name-only)
-UNSTAGED=$(git diff --name-only)
+# Use git status --porcelain to catch both modified-tracked and untracked files.
+# After mixed reset to an empty parent commit, file1.txt becomes untracked
+# (not in parent's tree), so git diff --name-only misses it.
+WORKING=$(git status --porcelain | awk '{print $NF}')
 assert_eq "mixed undo: nothing staged" "" "$STAGED"
-assert_contains "mixed undo: file is in working tree" "file1.txt" "$UNSTAGED"
+assert_contains "mixed undo: file is in working tree" "file1.txt" "$WORKING"
 
 # Restage and recommit
 git add file1.txt
