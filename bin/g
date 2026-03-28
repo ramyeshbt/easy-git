@@ -20,6 +20,9 @@ dispatch() {
   shift || true
 
   case "$cmd" in
+    # Setup
+    init|i)                source "${LIB_DIR}/init.sh";     main_init "$@" ;;
+
     # Core subcommands
     commit|c)              source "${LIB_DIR}/commit.sh";   main_commit "$@" ;;
     push|p)                source "${LIB_DIR}/push.sh";     main_push "$@" ;;
@@ -117,6 +120,9 @@ ${BOLD}g${RESET} — Easy Git v${G_VERSION}
 
 ${BOLD}USAGE${RESET}
   g <command> [flags]
+
+${BOLD}REPO SETUP${RESET}
+  ${CYAN}init${RESET}     i    Guided setup wizard: identity, branch, .gitignore, README, first commit
 
 ${BOLD}DAILY COMMANDS${RESET}
   ${CYAN}commit${RESET}   c    Interactive conventional commit (staged + message builder)

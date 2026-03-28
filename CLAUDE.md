@@ -356,6 +356,11 @@ grep -n '"/home\|"/Users\|C:\\' lib/*.sh bin/g
 
 ## 9. SUBCOMMAND REFERENCE
 
+### Setup
+| Command | Short | Description |
+|---------|-------|-------------|
+| `g init` | `g i` | Guided wizard: identity · branch · .gitignore · README · initial commit |
+
 ### Daily Workflow
 | Command | Short | Description |
 |---------|-------|-------------|
@@ -759,6 +764,11 @@ fi
 
 | Scenario | Covered By | Status |
 |----------|-----------|--------|
+| **SETUP** | | |
+| Initialize a new repository | `g init` | ✓ |
+| Set git identity (name/email) | `g init` step 1 | ✓ |
+| Pick default branch | `g init` step 2 | ✓ |
+| Create .gitignore from template | `g init` step 3 | ✓ |
 | **DAILY** | | |
 | Make and commit changes | `g commit` | ✓ |
 | Push branch | `g push` | ✓ |
@@ -815,7 +825,6 @@ fi
 | `g bisect` — find which commit broke something | MEDIUM | `git bisect` works via pass-through |
 | `g cherry` — cherry-pick commits across branches | MEDIUM | `git cherry-pick` works via pass-through |
 | `g worktree` — manage parallel worktrees | LOW | `git worktree` works via pass-through |
-| `g init` — smart repo init with .gitignore templates | LOW | `git init` works via pass-through |
 | `g submodule` — submodule helpers | LOW | Niche use case; `git submodule` works via pass-through |
 | Interactive rebase (`g rebase -i`) wrapper | MEDIUM | `git rebase -i` works via pass-through |
 | Changelog generation from conventional commits | LOW | Would pair well with `g tag` |
