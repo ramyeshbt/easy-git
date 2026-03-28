@@ -70,16 +70,17 @@ switch_branch() {
 create_or_switch_branch() {
   local name="$1"
 
-  # Sanitize branch name — strip shell-dangerous chars, prevent flag injection
+  # Reject flag injection: names starting with - look like git flags
+  case "$name" in
+    -*) error "Branch name cannot start with '-': '$name'"; return 1 ;;
+  esac
+
+  # Sanitize branch name — strip shell-dangerous chars
   local safe_name
   safe_name=$(echo "$name" \
     | sed 's/[[:space:]]/-/g' \
     | tr '[:upper:]' '[:lower:]' \
     | sed 's/[^a-zA-Z0-9._/\-]//g')   # whitelist: alphanumeric, dot, dash, slash, underscore
-
-  # Prevent flag injection: branch names must not start with - or --
-  safe_name="${safe_name#-}"
-  safe_name="${safe_name#-}"
 
   # Prevent git lock-file collision: must not end with .lock
   safe_name="${safe_name%.lock}"

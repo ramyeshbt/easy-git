@@ -24,9 +24,12 @@ for test_file in "${SCRIPT_DIR}"/test_*.sh; do
 
   echo "▶  Running: ${suite_name}"
 
-  # Capture output and exit code
+  # Capture output and exit code — set +e prevents set -euo pipefail from
+  # killing the runner when a test suite exits with non-zero
+  set +e
   output=$(bash "$test_file" 2>&1)
   exit_code=$?
+  set -e
 
   echo "$output"
 

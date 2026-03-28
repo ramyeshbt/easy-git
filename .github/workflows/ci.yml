@@ -57,7 +57,8 @@ jobs:
 
       - name: Check bin/g and lib/*.sh
         # SC1090/SC1091: dynamic `source "$(dirname ...)/core.sh"` — expected pattern
-        run: shellcheck -S warning -e SC1090,SC1091 bin/g lib/*.sh
+        # SC2034: vars defined in core.sh (colors, etc.) appear unused in isolation
+        run: shellcheck -S warning -e SC1090,SC1091,SC2034 bin/g lib/*.sh
 
       - name: Check install.sh and uninstall.sh
         run: shellcheck -S warning install.sh uninstall.sh
@@ -79,7 +80,9 @@ jobs:
           fail=0
 
           # Case conversion: ${var,} ${var,,} ${var^} ${var^^}  (bash 4+)
-          if grep -rEn '\$\{[A-Za-z_][A-Za-z0-9_]*(,+|\^+)\}' lib/ bin/g 2>/dev/null; then
+          # Exclude comment lines (filename:linenum:   # comment text)
+          if grep -rEn '\$\{[A-Za-z_][A-Za-z0-9_]*(,+|\^+)\}' lib/ bin/g 2>/dev/null \
+              | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#'; then
             echo "ERROR: bash 4+ case conversion found — use 'tr' instead"
             fail=1
           fi
