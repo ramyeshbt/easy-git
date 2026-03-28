@@ -3,6 +3,9 @@
 > **Rule:** Any time Claude does something wrong, add a rule here so it doesn't happen again.
 > Commit this file. Everyone on the team can update it.
 
+**Authors:** ramyeshbt · Claude Sonnet 4.6 (Anthropic)
+**License:** Apache 2.0 — see [LICENSE](LICENSE)
+
 ---
 
 ## CRITICAL RULES — READ FIRST
@@ -19,12 +22,17 @@
 | 8 | Never declare "done" without running `bash tests/run_tests.sh` | Quality gate |
 | 9 | Prefer `git` plumbing commands over porcelain where reliability matters | Stability |
 | 10 | After every correction: *"Update CLAUDE.md so this doesn't happen again."* | Compounding improvement |
-| 11 | **Always use `--` before user-supplied branch/file names** in git commands | Prevents flag injection (`--force` as branch name) |
+| 11 | **`git checkout -b` must NOT use `--` between `-b` and the branch name** — use `git checkout -b "$name"` (not `git checkout -b -- "$name"`). Use `--` only before file paths, not branch names after `-b`. Reject leading-dash names with a `case` guard instead. | `git checkout -b -- name` makes git treat `--` as the branch name and `name` as the start-point (broken in git 2.23+) |
 | 12 | **Always add `|| true`** after `grep -v` in pipelines under `set -euo pipefail` | grep -v returns 1 when all lines match — kills script |
 | 13 | **Always `trap 'rm -f "$tmp"' EXIT`** when using `mktemp` | Prevents temp file leaks on error |
 | 14 | **New subcommands that rewrite history** (squash, rebase) must warn the user and require confirm() | History rewrites on shared branches break teammates |
 | 15 | **`g conflict`** must handle all three in-progress states: merge, rebase, cherry-pick | Missing a state leaves users stranded |
 | 16 | **`g push` must warn before pushing to protected branches** (main, master, develop, release, production, staging) | Direct pushes bypass PR review; added `_check_protected_branch()` in push.sh |
+| 17 | **`confirm()` must fall back to stdin when not a TTY** — use `if [ -t 0 ]; then read </dev/tty; else read; fi` | Tests pipe `echo "y" \| func` to stdin; reading from `/dev/tty` silently ignores the pipe |
+| 18 | **`run_tests.sh` must guard `output=$(bash test_file)` with `set +e` / `set -e`** | Under `set -euo pipefail`, a failing test subshell exits the runner before any other suite runs |
+| 19 | **Test helpers `assert_fails` / `assert_exits_ok` must run commands in a subshell `( "$@" )`** | `die()` calls `exit 1`; without a subshell that kills the entire test script mid-run |
+| 20 | **Portability regex checks must exclude comment lines** — pipe grep output through `grep -vE '^[^:]+:[0-9]+:[[:space:]]*#'` | Inline comments explaining bash 4+ patterns (e.g. `# ${var,} is bash 4+`) trigger false positives |
+| 21 | **ShellCheck exclusions needed for this project** — always use `-e SC1090,SC1091,SC2034` on `lib/*.sh` and `bin/g`; add `-e SC2164` for test files | SC1090/91: dynamic source paths; SC2034: cross-file vars; SC2164: cd in test scripts |
 
 ---
 
@@ -46,11 +54,13 @@
 15. [Slash Commands](#15-slash-commands)
 16. [Agents](#16-agents)
 17. [Security Hardening — Audit Findings & Fixes](#17-security-hardening--audit-findings--fixes)
-18. [Bug Fixing Protocol](#18-bug-fixing-protocol)
-19. [Long-Running Task Handling](#19-long-running-task-handling)
-20. [Terminal & Environment](#20-terminal--environment)
-21. [DO NOTs — Anti-Patterns](#21-do-nots--anti-patterns)
-22. [Project-Specific Rules](#22-project-specific-rules)
+18. [CI / GitHub Actions Learnings](#18-ci--github-actions-learnings)
+19. [Bug Fixing Protocol](#19-bug-fixing-protocol-was-18)
+20. [Long-Running Task Handling](#20-long-running-task-handling)
+21. [Terminal & Environment](#21-terminal--environment)
+22. [DO NOTs — Anti-Patterns](#22-do-nots--anti-patterns)
+23. [Workflow Coverage Audit](#23-workflow-coverage-audit)
+24. [Project-Specific Rules](#24-project-specific-rules)
 
 ---
 
@@ -578,7 +588,106 @@ bash tests/test_security.sh
 
 ---
 
-## 18. BUG FIXING PROTOCOL
+## 18. CI / GITHUB ACTIONS LEARNINGS
+
+> Recorded from the first CI run (2026-03-28). Each entry is a real failure we hit and fixed.
+
+### git checkout -b and the -- separator
+
+**Problem:** `git checkout -b -- "$branch"` was added as an injection guard. In git 2.23+ this is
+parsed as: create a branch literally named `--`, using `$branch` as the start-point. All branch
+creation silently failed; git printed a fatal error but the function continued.
+
+**Rule:** Do NOT use `--` between `-b` and the branch name. Instead reject flag-injection at input
+time with `case "$name" in -*) error ...; return 1 ;; esac` before sanitization.
+
+```bash
+# WRONG (git 2.23+): treats -- as the new branch name
+git checkout -b -- "$safe_name"
+
+# CORRECT: name already sanitized, -- not needed
+git checkout -b "$safe_name"
+```
+
+Similarly, `git checkout -- "$target"` restores a *file* named `$target`, it does not switch
+branches. Use `git checkout "$target"` for branch switching.
+
+---
+
+### confirm() must be testable via pipes
+
+**Problem:** `confirm()` read unconditionally from `/dev/tty`. Tests using `echo "y" | func`
+passed `y` to stdin, but confirm ignored stdin and got EOF from `/dev/tty` — always returning N.
+
+**Rule:** Always fall back to stdin when not a TTY:
+
+```bash
+if [ -t 0 ]; then
+  read -r answer </dev/tty
+else
+  read -r answer   # test pipes / CI
+fi
+```
+
+---
+
+### test helpers must use subshells
+
+**Problem:** `assert_fails` ran the tested command directly with `if ! "$@"`. When `die()` was
+called inside the tested function, `exit 1` killed the ENTIRE test script mid-run. All subsequent
+assertions were skipped; `print_summary` never ran; the runner reported a cryptic non-zero exit.
+
+**Rule:** Always wrap in `( )`:
+
+```bash
+if ! ( "$@" ) &>/dev/null; then   # subshell contains die()/exit
+```
+
+---
+
+### run_tests.sh set -e vs failing test suites
+
+**Problem:** `run_tests.sh` uses `set -euo pipefail`. When the first test suite (`test_branch`)
+returned non-zero, `output=$(bash test_branch.sh 2>&1)` triggered `set -e` and killed the runner
+immediately — all other suites were skipped and total counts were wrong.
+
+**Rule:** Guard the capture with `set +e` / `set -e`:
+
+```bash
+set +e
+output=$(bash "$test_file" 2>&1)
+exit_code=$?
+set -e
+```
+
+---
+
+### ShellCheck in CI needs targeted exclusions
+
+| Code | Reason to exclude | Where |
+|------|-------------------|-------|
+| SC1090/SC1091 | Dynamic `source "$(dirname ...)/core.sh"` paths | `bin/g`, `lib/*.sh`, `tests/*.sh` |
+| SC2034 | Colors / vars defined in `core.sh` appear unused without source-following | `lib/*.sh`, `bin/g` |
+| SC2164 | `cd` without `\|\| exit` — fine in test scripts | `tests/*.sh` |
+
+---
+
+### Portability regex false positives
+
+**Problem:** The bash 4+ feature check grepped for `${var,}` and matched a COMMENT in
+`commit.sh:169` that said `# NOTE: ${var,} is bash 4+ only`. The CI job failed on its own
+documentation.
+
+**Rule:** Filter comment lines from portability grep output:
+
+```bash
+grep -rEn 'pattern' lib/ bin/g 2>/dev/null \
+  | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#'
+```
+
+---
+
+## 19. BUG FIXING PROTOCOL (was 18)
 
 ```
 1. Reproduce: identify the exact command + git state that triggers the bug
@@ -594,7 +703,7 @@ bash tests/test_security.sh
 
 ---
 
-## 19. LONG-RUNNING TASK HANDLING
+## 20. LONG-RUNNING TASK HANDLING
 
 For tasks that take time (e.g. running against large repos):
 - Use `run_in_background` for the task itself
@@ -604,7 +713,7 @@ For tasks that take time (e.g. running against large repos):
 
 ---
 
-## 20. TERMINAL & ENVIRONMENT
+## 21. TERMINAL & ENVIRONMENT
 
 ### PATH
 ```bash
@@ -629,7 +738,7 @@ fi
 
 ---
 
-## 21. DO NOTs — Anti-Patterns
+## 22. DO NOTs — Anti-Patterns
 
 - **Never** use `eval` — command injection risk
 - **Never** `cd` without checking it succeeded
@@ -642,7 +751,7 @@ fi
 
 ---
 
-## 22. WORKFLOW COVERAGE AUDIT
+## 23. WORKFLOW COVERAGE AUDIT
 
 > Last reviewed: 2026-03-28. Re-run when adding subcommands.
 
@@ -724,7 +833,7 @@ g worktree list        # git worktree list
 
 ---
 
-## 23. PROJECT-SPECIFIC RULES
+## 24. PROJECT-SPECIFIC RULES
 
 - The tool's primary UX principle: **sensible defaults, explicit escapes** — every command works with zero arguments
 - If `fzf` is available, use it for interactive selection; otherwise fall back to numbered list
