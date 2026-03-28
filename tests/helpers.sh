@@ -59,7 +59,8 @@ assert_not_contains() {
 assert_exits_ok() {
   local label="$1"
   shift
-  if "$@" &>/dev/null; then
+  # Run in subshell so die()/exit from tested functions don't kill the test script
+  if ( "$@" ) &>/dev/null; then
     _pass "$label"
   else
     _fail "$label" "Command failed: $*"
@@ -69,7 +70,8 @@ assert_exits_ok() {
 assert_fails() {
   local label="$1"
   shift
-  if ! "$@" &>/dev/null; then
+  # Run in subshell so die()/exit from tested functions don't kill the test script
+  if ! ( "$@" ) &>/dev/null; then
     _pass "$label"
   else
     _fail "$label" "Expected command to fail: $*"

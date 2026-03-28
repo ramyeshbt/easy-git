@@ -109,7 +109,12 @@ confirm() {
   local prompt="$1"
   local answer
   printf "%b" "${YELLOW}?${RESET} ${prompt} [y/N] "
-  read -r answer </dev/tty
+  # Use /dev/tty when interactive; fall back to stdin for pipes/CI
+  if [ -t 0 ]; then
+    read -r answer </dev/tty
+  else
+    read -r answer
+  fi
   case "$answer" in
     [yY]|[yY][eE][sS]) return 0 ;;
     *) return 1 ;;

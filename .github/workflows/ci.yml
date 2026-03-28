@@ -64,7 +64,8 @@ jobs:
         run: shellcheck -S warning install.sh uninstall.sh
 
       - name: Check tests/*.sh
-        run: shellcheck -S warning -e SC1090,SC1091 tests/*.sh
+        # SC2164: cd without || exit — acceptable in test scripts (failures are caught by set -e)
+        run: shellcheck -S warning -e SC1090,SC1091,SC2164 tests/*.sh
 
   # ────────────────────────────────────────────────────────────────────────────
   # 3. Bash 3.2 portability — no bash 4+ features

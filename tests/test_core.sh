@@ -12,7 +12,7 @@ assert_eq "truncate_str: short string unchanged" \
   "hello" "$(truncate_str "hello" 10)"
 
 assert_eq "truncate_str: long string truncated" \
-  "hello wo..." "$(truncate_str "hello world foo bar" 10)"
+  "hello w..." "$(truncate_str "hello world foo bar" 10)"
 
 assert_eq "truncate_str: exact length unchanged" \
   "hello" "$(truncate_str "hello" 5)"

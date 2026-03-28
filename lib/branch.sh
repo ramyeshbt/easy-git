@@ -115,13 +115,13 @@ create_or_switch_branch() {
     warn "You have uncommitted changes."
     if confirm "Stash them before switching?"; then
       run_cmd git stash push -m "auto-stash before branch $safe_name"
-      run_cmd git checkout -b -- "$safe_name" "$base" 2>/dev/null || run_cmd git checkout -b -- "$safe_name"
+      run_cmd git checkout -b "$safe_name" "$base" 2>/dev/null || run_cmd git checkout -b "$safe_name"
       run_cmd git stash pop
     else
-      run_cmd git checkout -b -- "$safe_name"
+      run_cmd git checkout -b "$safe_name"
     fi
   else
-    run_cmd git checkout -b -- "$safe_name"
+    run_cmd git checkout -b "$safe_name"
   fi
 
   success "Created and switched to '${BOLD}${safe_name}${RESET}'"
@@ -142,11 +142,11 @@ _do_switch() {
     warn "You have uncommitted changes."
     if confirm "Stash them before switching?"; then
       run_cmd git stash push -m "auto-stash switching to $target"
-      run_cmd git checkout -- "$target"
+      run_cmd git checkout "$target"
       run_cmd git stash pop
       success "Switched to '${BOLD}${target}${RESET}' (stash restored)"
     else
-      run_cmd git checkout -- "$target"
+      run_cmd git checkout "$target"
       success "Switched to '${BOLD}${target}${RESET}'"
     fi
   else
