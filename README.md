@@ -7,6 +7,7 @@ If you've ever typed `git add -A && git commit -m "stuff"` for the hundredth tim
 **easy-git** wraps the most common git operations into a single `g` command with smart defaults, clear output, and safety checks built in.
 
 ```
+g init       → set up a new repo (identity, branch, .gitignore, first commit)
 g s          → see what changed
 g c          → commit (guided, step by step)
 g p          → push (auto-sets upstream, offers to create a PR)
@@ -24,6 +25,7 @@ Raw git is powerful but has a steep learning curve. Common friction points:
 
 | The frustration | What easy-git does |
 |---|---|
+| "Where do I even start?" — name, email, branch, .gitignore | `g init` — guided wizard covers every prerequisite |
 | `git push` fails: *"no upstream branch"* | `g push` sets upstream automatically |
 | Switching branches loses uncommitted work | `g branch` auto-stashes and restores |
 | "How do I undo my last commit without losing work?" | `g undo` shows what it will do before doing it |
@@ -57,7 +59,7 @@ bash --version  # should print: GNU bash, version 3.x or newer
 **Step 1 — Download the project**
 
 ```bash
-git clone https://github.com/yourname/easy-git.git
+git clone https://github.com/ramyeshbt/easy-git.git
 cd easy-git
 ```
 
@@ -107,7 +109,27 @@ Without fzf, `g branch` and `g stash` show a numbered list instead. Everything s
 
 ## Your first time using it
 
-Navigate into any git repository and try these in order:
+### Starting a brand-new project?
+
+Run `g init` — it's a step-by-step wizard that sets up everything:
+
+```bash
+mkdir my-project && cd my-project
+g init
+```
+
+The wizard walks you through:
+1. **Git identity** — your name and email (required for commits)
+2. **Default branch** — `main`, `master`, or a custom name
+3. **.gitignore** — pick a language template (Node.js, Python, Go, Rust, Java, Ruby, C/C++, PHP, or Generic). Every template includes a secrets section that blocks `.env`, `*.pem`, private keys, and credentials from being accidentally committed.
+4. **README.md** — creates a starter file with your project name and description
+5. **Initial commit** — stages everything and creates your first commit
+
+At the end it shows you the exact commands to connect a remote and start working.
+
+### Working in an existing repo?
+
+Navigate into it and try these:
 
 ```bash
 cd your-project
@@ -122,6 +144,79 @@ g p                 # push to remote
 ---
 
 ## Command reference
+
+### `g init` (or `g i`)
+
+Guided setup wizard for new repositories. Covers every prerequisite before you can start using git.
+
+```bash
+g init                   # wizard in the current directory
+g init my-project        # create directory and run wizard inside it
+```
+
+**What the wizard covers:**
+
+| Step | What it configures |
+|------|-------------------|
+| **[1/4] Git identity** | `user.name` and `user.email` — required for every commit. Can be saved globally (all repos) or locally (this repo only). Pre-fills from your existing global config if set. |
+| **[2/4] Default branch** | `main` (recommended), `master`, or a custom name. Works before the first commit. |
+| **[3/4] .gitignore** | Language template — Node.js, Python, Go, Rust, Java, Ruby, C/C++, PHP, or Generic. Every template includes a built-in secrets section (see below). |
+| **[4/4] README.md** | Optional starter with your project title and description. |
+| **Initial commit** | Stages all files, shows a preview, lets you set the commit message. |
+
+**Built-in secrets protection** — every `.gitignore` template blocks these automatically:
+- `.env`, `.env.local`, `*.env.*`
+- Private keys: `*.pem`, `*.key`, `*_rsa`, `*_dsa`, `*_ed25519`
+- Credentials: `.aws/credentials`, `.docker/config.json`, `.kube/config`, `.npmrc`, `.netrc`
+- Config files: `terraform.tfvars`, `secrets.*`, `credentials.*`, `.vault-pass`
+
+**Example session:**
+```
+g init — Repository Setup Wizard
+
+  Project: my-api   Path: /home/user/my-api
+
+  [1/4] Git Identity
+  ? Full name [Jane Smith]:
+  ? Email [jane@example.com]:
+
+  [2/4] Default Branch
+    1) main    (recommended — GitHub/GitLab/Bitbucket default)
+    2) master  (legacy)
+    3) custom
+  ? Choose [1-3, default=1]:
+
+  [3/4] .gitignore Template
+    1) Node.js   2) Python   3) Go   4) Rust   5) Java
+    6) Ruby      7) C/C++    8) PHP  9) Generic  0) None
+  ? Choose template [0-9, default=9]: 1
+  ✓ .gitignore created (Node.js template)
+
+  [4/4] README.md
+  ? Create a README.md? [y/N] y
+  ? One-line description [A new project]: REST API for user management
+  ✓ Created README.md
+
+  4 file(s) ready to stage:
+    A .gitignore
+    A README.md
+  ? Stage all files and create initial commit? [y/N] y
+  ? Commit message [chore: initial commit]:
+  ✓ Initial commit created.
+
+You're all set!
+  ✓ Repository:  /home/user/my-api
+  ✓ Branch:      main
+  ✓ Identity:    Jane Smith <jane@example.com>
+  ✓ .gitignore:  Node.js template
+
+  Connect to a remote:
+    gh repo create           ← easiest (requires gh CLI)
+    git remote add origin <url>
+    g push
+```
+
+---
 
 ### `g status` (or `g s`)
 
@@ -502,6 +597,15 @@ g version: 1.0.0
 
 ## Everyday workflows
 
+### Starting a new project from scratch
+
+```bash
+mkdir my-project && cd my-project
+g init                           # full setup wizard
+gh repo create                   # create GitHub repo (requires gh)
+g push                           # push initial commit
+```
+
 ### Starting a new feature
 
 ```bash
@@ -576,6 +680,8 @@ g rebase -i HEAD~3  # same as: git rebase -i HEAD~3
 g cherry-pick abc123
 ```
 
+**`g init` works on existing repos too.** If you've already been using `git init` manually and want to configure your identity, add a `.gitignore`, or make your first commit, just run `g init` — it detects the existing repo and skips steps that are already done.
+
 **Dry-run mode** — add `G_DRY_RUN=1` before any command to see what it would do without doing it:
 
 ```bash
@@ -610,6 +716,12 @@ export PATH="/path/to/easy-git/bin:$PATH"  # easy-git
 
 ## Troubleshooting
 
+**`g init` says "name is required"**
+> You pressed Enter with an empty name. Git requires both a name and email to create commits — these are recorded in every commit you make.
+
+**`g init` — I skipped a step and want to redo it**
+> `g init` is safe to re-run. It detects your existing config and offers to overwrite. For just identity: `git config user.name "Name"` and `git config user.email "email"`. For just .gitignore: `g ignore` or edit `.gitignore` directly.
+
 **`g: command not found`**
 > Run `source ~/.bashrc` (or `.zshrc`) after installing, or open a new terminal.
 
@@ -627,6 +739,12 @@ export PATH="/path/to/easy-git/bin:$PATH"  # easy-git
 
 ---
 
+## Authors
+
+**ramyeshbt** · **Claude Sonnet 4.6** (Anthropic)
+
+---
+
 ## License
 
-MIT — use it, modify it, share it.
+Apache 2.0 — see [LICENSE](LICENSE) for the full text. Use it, modify it, share it.
