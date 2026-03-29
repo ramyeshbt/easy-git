@@ -110,8 +110,12 @@ main_commit() {
   _check_staged_secrets
 
   # If message not provided, build it interactively
+  # Must NOT call inside $() — build_commit_message displays the type list
+  # to stdout, and $() would capture that display instead of showing it.
   if [ -z "$message" ]; then
-    message=$(build_commit_message)
+    _COMMIT_MSG=""
+    build_commit_message
+    message="$_COMMIT_MSG"
     [ -z "$message" ] && return 1
   fi
 
@@ -131,7 +135,12 @@ main_commit() {
   hint "Run 'g push' to push your changes."
 }
 
+# Module-level global — set by build_commit_message, read by main_commit.
+# Must not be called inside $() — all display goes to stdout.
+_COMMIT_MSG=""
+
 build_commit_message() {
+  _COMMIT_MSG=""
   local type scope subject body breaking
 
   # Step 1: Choose commit type
@@ -213,7 +222,7 @@ build_commit_message() {
   echo ""
 
   if confirm "Use this message?"; then
-    echo "$full_message"
+    _COMMIT_MSG="$full_message"
   else
     warn "Commit cancelled."
     return 1

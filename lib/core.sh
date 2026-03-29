@@ -151,10 +151,12 @@ prompt_input() {
   local prompt="$1"
   local default="${2:-}"
   local value
+  # Write prompt to stderr so callers can safely use $(prompt_input ...)
+  # without capturing the prompt text into the variable.
   if [ -n "$default" ]; then
-    printf "%b" "${CYAN}?${RESET} ${prompt} [${DIM}${default}${RESET}]: "
+    printf "%b" "${CYAN}?${RESET} ${prompt} [${DIM}${default}${RESET}]: " >&2
   else
-    printf "%b" "${CYAN}?${RESET} ${prompt}: "
+    printf "%b" "${CYAN}?${RESET} ${prompt}: " >&2
   fi
   read -r value </dev/tty
   echo "${value:-$default}"
