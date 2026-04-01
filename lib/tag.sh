@@ -10,7 +10,7 @@ main_tag() {
   case "${1:-}" in
     -h|--help)    usage_tag; return 0 ;;
     -l|--list)    tag_list; return 0 ;;
-    -d|--delete)  shift; tag_delete "$@"; return $? ;;
+    -d|--delete)  shift; tag_delete "$@"; return ;;
     "")           tag_list; return 0 ;;
     *)            tag_create "$@"; return $? ;;
   esac
@@ -101,7 +101,7 @@ tag_create() {
       message=$(prompt_input "Tag message" "Release $version")
     fi
     confirm "Create annotated tag '$version'?" || return 1
-    run_cmd git tag -a -- "$version" -m "$message"
+    run_cmd git tag -a -m "$message" -- "$version"
   else
     confirm "Create lightweight tag '$version'?" || return 1
     run_cmd git tag -- "$version"
@@ -134,7 +134,19 @@ tag_delete() {
   fi
 
   if ! git tag | grep -qxF "$version"; then
-    die "Tag '$version' does not exist locally."
+    local tag_count
+    tag_count=$(git tag | wc -l | tr -d ' ')
+    error "Tag '$version' does not exist locally."
+    if [ "$tag_count" -gt 0 ]; then
+      echo ""
+      echo -e "${BOLD}Available tags:${RESET}"
+      git tag --sort=-version:refname | while IFS= read -r t; do
+        echo -e "  ${CYAN}${t}${RESET}"
+      done
+      echo ""
+      hint "Run 'g tag -d' (no argument) for interactive selection."
+    fi
+    return 1
   fi
 
   confirm "Delete local tag '$version'?" || return 1
@@ -143,7 +155,7 @@ tag_delete() {
 
   local remote
   remote=$(default_remote)
-  if git ls-remote --tags "$remote" "$version" 2>/dev/null | grep -q "$version"; then
+  if git ls-remote --tags "$remote" "$version" 2>/dev/null | grep -qxF "refs/tags/${version}"; then
     if confirm "Also delete '$version' from remote '${remote}'?"; then
       run_cmd git push "$remote" --delete -- "$version"
       success "Remote tag '${version}' deleted."

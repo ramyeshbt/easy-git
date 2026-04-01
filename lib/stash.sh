@@ -49,10 +49,11 @@ stash_pop() {
   fi
 
   if [ "$stash_count" = "1" ] || [ -n "${1:-}" ]; then
-    local ref="${1:-stash@{0}}"
+    local ref="${1:-}"
+    [ -z "$ref" ] && ref='stash@{0}'  # avoid nested-brace expansion bug
     # Validate stash ref format to prevent flag injection
     if ! [[ "$ref" =~ ^stash@\{[0-9]+\}$ ]]; then
-      die "Invalid stash reference: '$ref'. Expected format: stash@{N}"
+      _stash_ref_error "$ref" "pop"
     fi
     run_cmd git stash pop "$ref"
     success "Stash restored."
@@ -85,17 +86,42 @@ stash_list() {
   fi
 
   header "Saved stashes (${stash_count}):"
-  git stash list | while IFS= read -r line; do
-    # stash@{0}: On branch: message
+  _print_stash_entries
+  echo ""
+  hint "g stash pop  [stash@{N}]   — restore a stash (interactive if omitted)"
+  hint "g stash drop [stash@{N}]   — discard a stash (interactive if omitted)"
+  hint "g stash show [stash@{N}]   — preview a stash (interactive if omitted)"
+  hint "Example: g stash drop stash@{0}"
+}
+
+# Print stash entries with index and message — shared by list and error paths
+_print_stash_entries() {
+  while IFS= read -r line; do
     local ref msg
     ref=$(echo "$line" | grep -oE 'stash@\{[0-9]+\}')
     msg="${line#*: }"  # pure bash — safe from sed delimiter injection
     echo -e "  ${CYAN}${ref}${RESET}  ${msg}"
-  done
+  done < <(git stash list)
+}
+
+# Show available stashes inline when user provided an invalid/unknown ref
+_stash_ref_error() {
+  local bad_ref="$1"
+  local action="$2"
+  local stash_count
+  stash_count=$(git stash list 2>/dev/null | wc -l | tr -d ' ')
   echo ""
-  hint "g stash pop      — restore latest stash"
-  hint "g stash drop     — discard a stash"
-  hint "g stash show     — preview a stash"
+  error "Invalid stash reference: '${bad_ref}'"
+  echo -e "  ${DIM}Expected format: stash@{N}  (e.g. stash@{0}, stash@{1})${RESET}"
+  echo ""
+  if [[ "$stash_count" -gt 0 ]]; then
+    echo -e "${BOLD}Available stashes:${RESET}"
+    _print_stash_entries
+    echo ""
+    hint "Run 'g stash ${action}' (no argument) for interactive selection."
+    hint "Or:  g stash ${action} stash@{0}"
+  fi
+  exit 1
 }
 
 stash_drop() {
@@ -123,7 +149,7 @@ stash_drop() {
 
   # Validate stash ref format
   if ! [[ "$ref" =~ ^stash@\{[0-9]+\}$ ]]; then
-    die "Invalid stash reference: '$ref'. Expected format: stash@{N}"
+    _stash_ref_error "$ref" "drop"
   fi
 
   confirm "Drop stash '${ref}'? This cannot be undone." || return 1
@@ -154,10 +180,10 @@ stash_show() {
     ref=$(echo "$selected" | grep -oE 'stash@\{[0-9]+\}')
   fi
 
-  ref="${ref:-stash@{0}}"
+  [ -z "$ref" ] && ref='stash@{0}'  # avoid nested-brace expansion bug
   # Validate stash ref format
   if ! [[ "$ref" =~ ^stash@\{[0-9]+\}$ ]]; then
-    die "Invalid stash reference: '$ref'. Expected format: stash@{N}"
+    _stash_ref_error "$ref" "show"
   fi
   git stash show -p "$ref"
 }
@@ -167,17 +193,26 @@ usage_stash() {
 ${BOLD}g stash${RESET} — Named stash management
 
 ${BOLD}USAGE${RESET}
-  g stash              # Save with auto-name (branch + timestamp)
-  g stash save [name]  # Save with custom name
-  g stash pop          # Restore latest stash (interactive if multiple)
-  g stash list         # Show all saved stashes
-  g stash drop [ref]   # Delete a stash
-  g stash show [ref]   # Preview stash diff
+  g stash                       # Save with auto-name (branch + timestamp)
+  g stash save [name]           # Save with custom name
+  g stash pop  [stash@{N}]      # Restore a stash (interactive picker if omitted)
+  g stash list                  # Show all saved stashes with their refs
+  g stash drop [stash@{N}]      # Delete a stash (interactive picker if omitted)
+  g stash show [stash@{N}]      # Preview stash diff (interactive picker if omitted)
+
+${BOLD}STASH REFS${RESET}
+  Stashes are referenced as stash@{0}, stash@{1}, etc.
+  stash@{0} is always the most recently saved stash.
+  Run 'g stash list' to see all refs with their names.
 
 ${BOLD}EXAMPLES${RESET}
-  g stash                      # Quick save
-  g stash save "WIP: auth fix" # Named save
-  g stash pop                  # Restore latest
-  g stash list                 # See all stashes
+  g stash                        # Quick save
+  g stash save "WIP: auth fix"   # Named save
+  g stash list                   # See refs: stash@{0}, stash@{1}, ...
+  g stash pop                    # Restore latest (or pick interactively)
+  g stash pop  stash@{1}         # Restore a specific stash by ref
+  g stash drop stash@{0}         # Drop the most recent stash
+  g stash drop                   # Pick a stash to drop interactively
+  g stash show stash@{0}         # Preview what stash@{0} contains
 EOF
 }

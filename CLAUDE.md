@@ -33,6 +33,10 @@
 | 19 | **Test helpers `assert_fails` / `assert_exits_ok` must run commands in a subshell `( "$@" )`** | `die()` calls `exit 1`; without a subshell that kills the entire test script mid-run |
 | 20 | **Portability regex checks must exclude comment lines** — pipe grep output through `grep -vE '^[^:]+:[0-9]+:[[:space:]]*#'` | Inline comments explaining bash 4+ patterns (e.g. `# ${var,} is bash 4+`) trigger false positives |
 | 21 | **ShellCheck exclusions needed for this project** — always use `-e SC1090,SC1091,SC2034` on `lib/*.sh` and `bin/g`; add `-e SC2164` for test files | SC1090/91: dynamic source paths; SC2034: cross-file vars; SC2164: cd in test scripts |
+| 22 | **Color variables must use `$'\033[...]'` (ANSI-C quoting), NOT `'\033[...]'`** — single-quoted strings store literal `\033` chars; `echo -e` handles them but `cat <<EOF` heredocs do NOT, causing raw `\033[0;31m` to appear in `g --help` output on Linux | Affects any script using `cat <<EOF` with `${BOLD}`, `${CYAN}` etc. (bin/g show_help, all usage_* functions) |
+| 23 | **Never use `${var:-stash@{0}}` or similar complex literals with nested `{}`** inside `${...:-default}` expansion — bash may consume the inner `}` as the outer closer, appending a stray `}` to the value. Use `[ -z "$var" ] && var='stash@{0}'` instead | Found in stash.sh: `"${1:-stash@{0}}"` produced `stash@{0}}` making the stash@{N} validation regex always fail |
+| 24 | **`git tag -a` flags order: always `-m "$msg" --` before the tag name** — `git tag -a -- v1.0.0 -m "msg"` treats `-m` as a positional arg after `--`, causing "fatal: too many arguments" | `git tag -a -m "$message" -- "$version"` is correct |
+| 25 | **When a command takes an identifier (stash ref, tag name, commit hash), always show available options on validation error** — use a helper like `_stash_ref_error()` that prints the list before dying | UX: user gets stuck without knowing valid values; test with `g stash drop "name"` |
 
 ---
 
@@ -688,6 +692,83 @@ documentation.
 ```bash
 grep -rEn 'pattern' lib/ bin/g 2>/dev/null \
   | grep -vE '^[^:]+:[0-9]+:[[:space:]]*#'
+```
+
+---
+
+### grep in pipeline with no matches exits 1 — `set -e` aborts silently (found 2026-04-01)
+
+**Problem:** `git reflog ... | grep -E "checkout|branch" | head -20` — if the reflog has no checkout/branch entries (e.g. a brand-new repo), `grep` exits 1, the pipeline fails, and the script aborts with no user-visible error. Found in `_recover_branch()`.
+
+**Rule:** Any `grep` that may legitimately find no matches must be wrapped with `|| true` when inside a pipeline under `set -euo pipefail`. Because of shell pipeline operator precedence, use braces:
+
+```bash
+# WRONG — silent abort when grep finds nothing
+git reflog ... | grep -E "checkout|branch" | head -20 | while ...
+
+# CORRECT — grep failure is handled, pipeline continues
+{ git reflog ... | grep -E "checkout|branch" || true; } | head -20 | while ...
+```
+
+---
+
+### `_print_stash_entries`: use `< <(...)` not pipe for `while` loop (found 2026-04-01)
+
+When `while IFS= read -r line; do ... done` uses a pipe (`cmd | while`), the `while` body runs in a subshell. All other stash `while` loops use process substitution `< <(...)` — use that everywhere for consistency.
+
+---
+
+### Bash nested-brace expansion in `${param:-default}` (found 2026-04-01)
+
+**Problem:** `"${ref:-stash@{0}}"` — bash does NOT treat `{0}` as a nested group in the default
+word. The first `}` closes the `{0}`, and the SECOND `}` closes the outer `${...}` expansion. This
+leaves the outer `}` as a literal character appended to the result. When `$ref` is already set to
+`stash@{0}`, the output becomes `stash@{0}}` — causing the `^stash@\{[0-9]+\}$` regex to always fail.
+
+**Rule:** Never put `{N}` literals inside `${...:-...}` default expressions. Use a conditional instead:
+
+```bash
+# WRONG — stray } appended when param is already set
+local ref="${1:-stash@{0}}"
+
+# CORRECT — avoids nested brace in default
+local ref="${1:-}"
+[ -z "$ref" ] && ref='stash@{0}'
+```
+
+---
+
+### `git tag -a` flag order with `--` separator (found 2026-04-01)
+
+**Problem:** `git tag -a -- "$version" -m "$message"` places `-m` after `--`, so git treats `-m`
+as a positional argument (the tag name), and `"$message"` as an extra positional arg → `fatal: too many arguments`.
+
+**Rule:** All flags must come before `--`:
+
+```bash
+# WRONG
+git tag -a -- "$version" -m "$message"
+
+# CORRECT
+git tag -a -m "$message" -- "$version"
+```
+
+---
+
+### Color variables in `core.sh` must use ANSI-C quoting (found 2026-04-01)
+
+**Problem:** `RED='\033[0;31m'` (single-quoted) stores LITERAL chars `\033[0;31m`, not the ESC byte.
+`echo -e` converts them at print time, but `cat <<EOF` heredocs do NOT — `show_help()` and all
+`usage_*` functions use cat heredocs, so `${BOLD}`, `${CYAN}` etc. print as raw `\033[1m` on Linux.
+
+**Rule:** Use `$'\033[...]'` (ANSI-C quoting) to embed the actual ESC byte (0x1B) at assignment time:
+
+```bash
+# WRONG — stores literal backslash chars, only echo -e handles them
+BOLD='\033[1m'
+
+# CORRECT — stores actual ESC byte, works in echo -e AND cat heredocs
+BOLD=$'\033[1m'
 ```
 
 ---

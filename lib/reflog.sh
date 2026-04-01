@@ -107,7 +107,8 @@ _recover_branch() {
   echo ""
 
   # Show all recent checkout events (branch switches, branch creations)
-  git reflog --format="%h %gs %ar" | grep -E "checkout|branch" | head -20 | \
+  # grep -E may return 1 (no matches) — || true prevents set -e from aborting
+  { git reflog --format="%h %gs %ar" | grep -E "checkout|branch" || true; } | head -20 | \
     while IFS= read -r line; do
       echo -e "  ${DIM}${line}${RESET}"
     done
@@ -125,7 +126,12 @@ _recover_branch() {
   branch_name=$(prompt_input "New branch name to recover to")
   [ -z "$branch_name" ] && return 1
 
-  run_cmd git checkout -b -- "$branch_name" "$hash"
+  # Guard against leading-dash names (flag injection) — consistent with branch.sh
+  case "$branch_name" in
+    -*) error "Branch name must not start with '-': '$branch_name'"; return 1 ;;
+  esac
+
+  run_cmd git checkout -b "$branch_name" "$hash"
   success "Recovered branch '${branch_name}' at ${hash}"
 }
 
@@ -149,7 +155,7 @@ _find_lost_commit() {
     echo "$dangling" | while IFS= read -r h; do
       local msg
       msg=$(git log -1 --pretty=format:"%s" "$h" 2>/dev/null || echo "")
-      if echo "$msg" | grep -qi "$query"; then
+      if echo "$msg" | grep -qi "$query" 2>/dev/null; then
         echo -e "  ${YELLOW}${h:0:8}${RESET}  ${msg}  ${DIM}(dangling)${RESET}"
       fi
     done

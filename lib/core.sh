@@ -4,15 +4,18 @@
 
 # ─── Colors (only when stdout is a TTY) ──────────────────────────────────────
 if [ -t 1 ]; then
-  RED='\033[0;31m'
-  GREEN='\033[0;32m'
-  YELLOW='\033[1;33m'
-  BLUE='\033[0;34m'
-  CYAN='\033[0;36m'
-  MAGENTA='\033[0;35m'
-  BOLD='\033[1m'
-  DIM='\033[2m'
-  RESET='\033[0m'
+  # Use $'...' (ANSI-C quoting) so variables hold the actual ESC byte (0x1B).
+  # This makes both `echo -e` AND `cat <<EOF` heredocs render colors correctly.
+  # Single-quoted '\033[...]' stores literal backslash chars — only echo -e handles them.
+  RED=$'\033[0;31m'
+  GREEN=$'\033[0;32m'
+  YELLOW=$'\033[1;33m'
+  BLUE=$'\033[0;34m'
+  CYAN=$'\033[0;36m'
+  MAGENTA=$'\033[0;35m'
+  BOLD=$'\033[1m'
+  DIM=$'\033[2m'
+  RESET=$'\033[0m'
 else
   RED='' GREEN='' YELLOW='' BLUE='' CYAN='' MAGENTA='' BOLD='' DIM='' RESET=''
 fi
