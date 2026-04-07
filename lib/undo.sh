@@ -48,12 +48,17 @@ undo_commit() {
   require_git_repo_with_commits
 
   local mode="mixed"  # default: unstaged
+  local yes=0
+
+  # Auto-confirm when stdin is not a TTY (non-interactive environments)
+  [ ! -t 0 ] && yes=1
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
-      --soft) mode="soft"; shift ;;
-      --hard) mode="hard"; shift ;;
+      --soft)  mode="soft";  shift ;;
+      --hard)  mode="hard";  shift ;;
       --mixed) mode="mixed"; shift ;;
+      -y|--yes) yes=1;       shift ;;
       *) die "Unknown flag: $1" ;;
     esac
   done
@@ -80,7 +85,9 @@ undo_commit() {
   esac
   echo ""
 
-  confirm "Undo this commit?" || return 1
+  if [ "$yes" -eq 0 ]; then
+    confirm "Undo this commit?" || return 1
+  fi
 
   run_cmd git reset "--${mode}" HEAD~1
 
@@ -202,8 +209,9 @@ ${BOLD}USAGE${RESET}
   g undo file <path>        # Discard changes to a specific file
 
 ${BOLD}FLAGS${RESET}
-  --soft    Keep changes staged
-  --hard    Discard all changes (irreversible)
+  --soft       Keep changes staged
+  --hard       Discard all changes (irreversible)
+  -y, --yes    Skip confirmation prompt (auto-applied in non-TTY environments)
   -h, --help
 
 ${BOLD}EXAMPLES${RESET}

@@ -37,6 +37,8 @@
 | 23 | **Never use `${var:-stash@{0}}` or similar complex literals with nested `{}`** inside `${...:-default}` expansion — bash may consume the inner `}` as the outer closer, appending a stray `}` to the value. Use `[ -z "$var" ] && var='stash@{0}'` instead | Found in stash.sh: `"${1:-stash@{0}}"` produced `stash@{0}}` making the stash@{N} validation regex always fail |
 | 24 | **`git tag -a` flags order: always `-m "$msg" --` before the tag name** — `git tag -a -- v1.0.0 -m "msg"` treats `-m` as a positional arg after `--`, causing "fatal: too many arguments" | `git tag -a -m "$message" -- "$version"` is correct |
 | 25 | **When a command takes an identifier (stash ref, tag name, commit hash), always show available options on validation error** — use a helper like `_stash_ref_error()` that prints the list before dying | UX: user gets stuck without knowing valid values; test with `g stash drop "name"` |
+| 26 | **Every `read` from `/dev/tty` must have a TTY guard** — use `if [ -t 0 ]; then read -r val </dev/tty; else read -r val; fi` in ALL interactive-input functions (`prompt_input`, `fuzzy_select`, any future helpers). `confirm()` already does this — keep all reads consistent. | `/dev/tty` crashes in CI, VS Code integrated terminal, and piped input with "No such device or address" |
+| 27 | **Non-interactive subcommand forms must support `--yes`/`-y`** and auto-apply it when `stdin` is not a TTY (`[ ! -t 0 ] && yes=1`). Don't add a `confirm()` gate that blocks forever on a command the user already typed explicitly. | `g undo commit` hung indefinitely in non-TTY sandboxes because `read` blocked on empty stdin |
 
 ---
 

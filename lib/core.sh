@@ -143,7 +143,11 @@ fuzzy_select() {
   done
   printf "%b" "${YELLOW}?${RESET} ${prompt} [1-${#items[@]}]: "
   local choice
-  read -r choice </dev/tty
+  if [ -t 0 ]; then
+    read -r choice </dev/tty
+  else
+    read -r choice
+  fi
   if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#items[@]}" ]; then
     echo "${items[$((choice-1))]}"
   fi
@@ -161,7 +165,11 @@ prompt_input() {
   else
     printf "%b" "${CYAN}?${RESET} ${prompt}: " >&2
   fi
-  read -r value </dev/tty
+  if [ -t 0 ]; then
+    read -r value </dev/tty
+  else
+    read -r value
+  fi
   echo "${value:-$default}"
 }
 
