@@ -32,7 +32,11 @@ undo_last() {
 
   local choice
   printf "%b" "${YELLOW}?${RESET} Choose [1-5]: "
-  read -r choice </dev/tty
+  if [ -t 0 ]; then
+    read -r choice </dev/tty
+  else
+    read -r choice
+  fi
 
   case "$choice" in
     1) undo_commit --soft ;;
@@ -130,7 +134,7 @@ undo_push() {
   echo ""
 
   confirm "Force-push to undo remote commit(s)?" || return 1
-  run_cmd git push "$remote" -- "$branch" --force-with-lease
+  run_cmd git push --force-with-lease "$remote" -- "$branch"
   success "Remote '${upstream}' updated."
 }
 
@@ -161,9 +165,7 @@ undo_file() {
 undo_file_interactive() {
   local changed_files=()
   while IFS= read -r line; do
-    # Remove status prefix and trim
-    local file="${line:3}"
-    changed_files+=("$file")
+    changed_files+=("$line")
   done < <(git diff --name-only)
 
   if [ "${#changed_files[@]}" -eq 0 ]; then
