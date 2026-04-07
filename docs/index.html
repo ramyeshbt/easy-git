@@ -1,0 +1,1691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>easy-git — Git, without the ceremony.</title>
+  <meta name="description" content="easy-git (g) — A bash CLI wrapper that replaces 20 memorized git commands with one smart g command.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23060b13'/><text x='4' y='24' font-family='monospace' font-size='22' font-weight='bold' fill='%2300c8ff'>g</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500&family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;1,300&display=swap" rel="stylesheet">
+
+<style>
+/* ═══════════════════════════════════════════════
+   DESIGN TOKENS
+═══════════════════════════════════════════════ */
+:root {
+  --bg:          #060b13;
+  --bg-s:        #0b1220;
+  --bg-e:        #101825;
+  --bg-card:     #0d1421;
+  --border:      rgba(255,255,255,0.07);
+  --border-c:    rgba(0,200,255,0.18);
+  --border-g:    rgba(0,232,154,0.18);
+
+  --text:        #dde5f0;
+  --text-d:      #7b8fa8;
+  --text-m:      #3e5270;
+
+  --c:           #00c8ff;
+  --c-dim:       rgba(0,200,255,0.1);
+  --c-glow:      rgba(0,200,255,0.22);
+  --g:           #00e89a;
+  --g-dim:       rgba(0,232,154,0.1);
+  --a:           #ffb224;
+  --a-dim:       rgba(255,178,36,0.1);
+  --r:           #ff4757;
+  --r-dim:       rgba(255,71,87,0.1);
+  --p:           #b78fff;
+  --p-dim:       rgba(183,143,255,0.1);
+
+  --ff-d: 'Syne', sans-serif;
+  --ff-b: 'DM Sans', sans-serif;
+  --ff-m: 'JetBrains Mono', monospace;
+
+  --sw: 264px;
+  --ease: 0.18s ease;
+  --r4: 6px;
+  --r8: 10px;
+  --r14: 14px;
+}
+
+/* ═══════════════════════════════════════════════
+   RESET
+═══════════════════════════════════════════════ */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth;scroll-padding-top:88px}
+body{
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--ff-b);
+  font-size:15px;
+  line-height:1.75;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+body::before{
+  content:'';
+  position:fixed;inset:0;
+  background-image:radial-gradient(circle,rgba(255,255,255,0.035) 1px,transparent 1px);
+  background-size:28px 28px;
+  pointer-events:none;
+  z-index:0;
+}
+a{color:var(--c);text-decoration:none}
+a:hover{text-decoration:underline}
+h1,h2,h3,h4{font-family:var(--ff-d);line-height:1.15;color:var(--text)}
+code,kbd{font-family:var(--ff-m);font-size:.855em}
+p{margin-bottom:14px}
+p:last-child{margin-bottom:0}
+
+/* ═══════════════════════════════════════════════
+   PROGRESS BAR
+═══════════════════════════════════════════════ */
+.progress{
+  position:fixed;top:0;left:0;height:2px;width:0%;
+  background:linear-gradient(90deg,var(--c),var(--g));
+  z-index:9999;
+  transition:width .08s linear;
+}
+
+/* ═══════════════════════════════════════════════
+   LAYOUT
+═══════════════════════════════════════════════ */
+.layout{display:flex;min-height:100vh;position:relative;z-index:1}
+
+/* ═══════════════════════════════════════════════
+   SIDEBAR
+═══════════════════════════════════════════════ */
+.sidebar{
+  width:var(--sw);flex-shrink:0;
+  position:sticky;top:0;height:100vh;
+  overflow-y:auto;overflow-x:hidden;
+  background:var(--bg-s);
+  border-right:1px solid var(--border);
+  display:flex;flex-direction:column;
+  z-index:100;
+}
+.sidebar::-webkit-scrollbar{width:3px}
+.sidebar::-webkit-scrollbar-track{background:transparent}
+.sidebar::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:2px}
+
+.sb-logo{
+  padding:22px 20px 18px;
+  border-bottom:1px solid var(--border);
+  text-decoration:none;
+  display:block;
+}
+.sb-logo:hover{text-decoration:none}
+.sb-logo-name{
+  font-family:var(--ff-d);
+  font-size:19px;font-weight:800;
+  letter-spacing:-.5px;
+  color:var(--text);
+}
+.sb-logo-name em{color:var(--c);font-style:normal}
+.sb-logo-sub{
+  font-family:var(--ff-m);
+  font-size:10.5px;color:var(--text-m);
+  margin-top:3px;
+  display:flex;align-items:center;gap:6px;
+}
+.sb-ver-dot{
+  display:inline-block;
+  width:5px;height:5px;
+  border-radius:50%;
+  background:var(--g);
+}
+
+.sb-nav{padding:14px 0 40px}
+
+.sb-label{
+  font-family:var(--ff-m);
+  font-size:9.5px;
+  font-weight:500;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--text-m);
+  padding:14px 20px 5px;
+}
+
+.sb-link{
+  display:flex;align-items:center;gap:9px;
+  padding:6.5px 20px;
+  font-size:13px;
+  color:var(--text-d);
+  cursor:pointer;
+  transition:all var(--ease);
+  border-left:2px solid transparent;
+  text-decoration:none;
+  line-height:1.4;
+}
+.sb-link:hover{
+  color:var(--text);
+  background:rgba(255,255,255,0.03);
+  border-left-color:rgba(255,255,255,0.1);
+  text-decoration:none;
+}
+.sb-link.active{
+  color:var(--c);
+  background:var(--c-dim);
+  border-left-color:var(--c);
+}
+.sb-link .dot{
+  width:4px;height:4px;border-radius:50%;
+  background:currentColor;flex-shrink:0;opacity:.4;
+}
+.sb-link.active .dot{opacity:1}
+.sb-link.sub{padding-left:32px;font-size:12.5px}
+
+/* ═══════════════════════════════════════════════
+   MAIN
+═══════════════════════════════════════════════ */
+.main{
+  flex:1;min-width:0;
+  max-width:860px;
+  padding:0 52px 140px;
+}
+
+/* ═══════════════════════════════════════════════
+   HERO
+═══════════════════════════════════════════════ */
+.hero{
+  padding:84px 0 72px;
+  position:relative;
+}
+.hero::after{
+  content:'';
+  position:absolute;bottom:0;left:-52px;right:0;
+  height:1px;
+  background:linear-gradient(90deg,transparent,var(--border) 30%,var(--border) 70%,transparent);
+}
+.hero-glow{
+  position:absolute;
+  top:-60px;right:-100px;
+  width:600px;height:600px;
+  border-radius:50%;
+  background:radial-gradient(circle,rgba(0,200,255,0.04) 0%,transparent 65%);
+  pointer-events:none;
+}
+.hero-eyebrow{
+  font-family:var(--ff-m);
+  font-size:11px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:var(--c);
+  margin-bottom:18px;
+  display:flex;align-items:center;gap:8px;
+}
+.hero-eyebrow::before{
+  content:'';
+  display:inline-block;width:24px;height:1px;
+  background:var(--c);
+}
+
+.hero-title{
+  font-size:clamp(44px,5.5vw,68px);
+  font-weight:800;
+  letter-spacing:-2.5px;
+  line-height:1.0;
+  margin-bottom:8px;
+}
+.hero-title .g-token{
+  color:var(--c);
+  font-family:var(--ff-m);
+  font-weight:400;
+  font-size:.62em;
+  opacity:.75;
+  letter-spacing:-1px;
+}
+
+.hero-tagline{
+  font-size:21px;
+  font-weight:300;
+  color:var(--text-d);
+  letter-spacing:-.2px;
+  margin-bottom:6px;
+}
+.hero-sub{
+  font-size:14.5px;
+  color:var(--text-m);
+  margin-bottom:36px;
+  max-width:500px;
+}
+
+.hero-badges{
+  display:flex;flex-wrap:wrap;gap:8px;
+  margin-bottom:52px;
+}
+.badge{
+  display:inline-flex;align-items:center;gap:5px;
+  padding:3px 10px;
+  border-radius:20px;
+  font-family:var(--ff-m);
+  font-size:10.5px;font-weight:500;
+  border:1px solid;
+  letter-spacing:.02em;
+}
+.bc{color:var(--c);border-color:rgba(0,200,255,.28);background:var(--c-dim)}
+.bg{color:var(--g);border-color:rgba(0,232,154,.28);background:var(--g-dim)}
+.ba{color:var(--a);border-color:rgba(255,178,36,.28);background:var(--a-dim)}
+.bx{color:var(--text-d);border-color:var(--border);background:rgba(255,255,255,.02)}
+
+/* ── Terminal ── */
+.terminal{
+  background:#07111d;
+  border:1px solid var(--border);
+  border-radius:var(--r14);
+  overflow:hidden;
+  box-shadow:
+    0 32px 80px rgba(0,0,0,.55),
+    0 0 0 1px rgba(255,255,255,.04),
+    0 0 40px rgba(0,200,255,.04),
+    inset 0 1px 0 rgba(255,255,255,.06);
+  max-width:600px;
+}
+.term-bar{
+  display:flex;align-items:center;gap:6px;
+  padding:11px 16px;
+  background:rgba(255,255,255,.03);
+  border-bottom:1px solid var(--border);
+}
+.term-dot{width:10px;height:10px;border-radius:50%}
+.term-dot:nth-child(1){background:#ff5f57}
+.term-dot:nth-child(2){background:#ffbd2e}
+.term-dot:nth-child(3){background:#27c840}
+.term-label{
+  flex:1;text-align:center;
+  font-family:var(--ff-m);font-size:11px;
+  color:var(--text-m);
+  margin-right:52px;
+}
+.term-body{
+  padding:20px 24px;
+  font-family:var(--ff-m);
+  font-size:12.5px;
+  line-height:1.9;
+  min-height:220px;
+}
+.tl{display:flex;align-items:flex-start;gap:8px}
+.tp{color:var(--g);flex-shrink:0;user-select:none}
+.tc{color:var(--text)}
+.to{color:var(--text-d);padding-left:2px}
+.tck{color:var(--g)}
+.tar{color:var(--c)}
+.twn{color:var(--a)}
+.cursor{
+  display:inline-block;
+  width:7px;height:13px;
+  background:var(--c);
+  vertical-align:middle;
+  margin-left:2px;
+  animation:blink 1s step-end infinite;
+}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+
+/* ═══════════════════════════════════════════════
+   SECTIONS
+═══════════════════════════════════════════════ */
+.section{padding:72px 0 0}
+
+.sec-label{
+  font-family:var(--ff-m);
+  font-size:10.5px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  color:var(--c);
+  margin-bottom:10px;
+  display:flex;align-items:center;gap:8px;
+}
+.sec-label::before{
+  content:'';
+  display:inline-block;
+  width:16px;height:1px;
+  background:var(--c);
+}
+.sec-title{
+  font-size:28px;font-weight:700;
+  letter-spacing:-.7px;
+}
+.sec-desc{
+  font-size:14.5px;color:var(--text-d);
+  margin-top:10px;max-width:540px;
+}
+
+/* ═══════════════════════════════════════════════
+   CODE BLOCKS
+═══════════════════════════════════════════════ */
+.cb{
+  position:relative;
+  background:var(--bg-e);
+  border:1px solid var(--border);
+  border-radius:var(--r8);
+  overflow:hidden;
+  margin:22px 0;
+}
+.cb-header{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:9px 16px;
+  background:rgba(255,255,255,0.02);
+  border-bottom:1px solid var(--border);
+}
+.cb-lang{
+  font-family:var(--ff-m);font-size:10px;
+  letter-spacing:.1em;text-transform:uppercase;
+  color:var(--text-m);
+}
+.copy-btn{
+  display:flex;align-items:center;gap:5px;
+  padding:3px 10px;
+  border:1px solid var(--border);border-radius:4px;
+  background:transparent;
+  color:var(--text-m);
+  font-family:var(--ff-m);font-size:10px;
+  cursor:pointer;transition:all var(--ease);
+}
+.copy-btn:hover{
+  color:var(--text);
+  border-color:rgba(255,255,255,.15);
+  background:rgba(255,255,255,.05);
+}
+.copy-btn.ok{color:var(--g);border-color:rgba(0,232,154,.3)}
+.cb pre{
+  padding:20px 24px;
+  overflow-x:auto;
+  font-family:var(--ff-m);
+  font-size:12.5px;line-height:2;
+}
+.cb pre::-webkit-scrollbar{height:3px}
+.cb pre::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+/* syntax */
+.s-cm{color:#3d5268}
+.s-kw{color:var(--c)}
+.s-st{color:var(--g)}
+.s-fl{color:var(--p)}
+.s-va{color:var(--a)}
+.s-op{color:var(--text-d)}
+
+/* inline code */
+:not(pre)>code{
+  font-family:var(--ff-m);font-size:.85em;
+  color:var(--c);
+  background:var(--c-dim);
+  padding:2px 6px;border-radius:4px;
+  border:1px solid rgba(0,200,255,.14);
+}
+
+/* ═══════════════════════════════════════════════
+   CALLOUTS
+═══════════════════════════════════════════════ */
+.callout{
+  display:flex;gap:15px;
+  padding:18px 22px;
+  border-radius:var(--r8);
+  border:1px solid;
+  margin:24px 0;
+}
+.callout-icon{font-size:17px;flex-shrink:0;margin-top:1px}
+.callout-title{font-weight:600;font-size:13.5px;margin-bottom:3px}
+.callout-body{font-size:13.5px;color:var(--text-d)}
+.cl-c{background:var(--c-dim);border-color:rgba(0,200,255,.2)}
+.cl-c .callout-title{color:var(--c)}
+.cl-g{background:var(--g-dim);border-color:rgba(0,232,154,.2)}
+.cl-g .callout-title{color:var(--g)}
+.cl-a{background:var(--a-dim);border-color:rgba(255,178,36,.2)}
+.cl-a .callout-title{color:var(--a)}
+.cl-r{background:var(--r-dim);border-color:rgba(255,71,87,.2)}
+.cl-r .callout-title{color:var(--r)}
+
+/* ═══════════════════════════════════════════════
+   ARCHITECTURE DIAGRAM
+═══════════════════════════════════════════════ */
+.arch-wrap{
+  margin:32px 0;padding:36px 28px;
+  background:var(--bg-e);
+  border:1px solid var(--border);
+  border-radius:var(--r14);
+  overflow-x:auto;
+}
+.arch-flow{
+  display:flex;align-items:center;
+  justify-content:center;
+  gap:0;flex-wrap:nowrap;
+}
+.arch-node{
+  display:flex;flex-direction:column;
+  align-items:center;gap:7px;min-width:104px;
+}
+.arch-box{
+  padding:10px 16px;border-radius:var(--r8);
+  border:1px solid;font-family:var(--ff-m);
+  font-size:11.5px;font-weight:500;
+  text-align:center;white-space:nowrap;
+  transition:box-shadow var(--ease);
+}
+.arch-box:hover{box-shadow:0 0 16px currentColor;opacity:1}
+.ab-u{border-color:rgba(0,200,255,.4);background:rgba(0,200,255,.08);color:var(--c)}
+.ab-e{border-color:rgba(255,178,36,.4);background:rgba(255,178,36,.08);color:var(--a)}
+.ab-l{border-color:rgba(0,232,154,.4);background:rgba(0,232,154,.08);color:var(--g)}
+.ab-c{border-color:rgba(183,143,255,.4);background:rgba(183,143,255,.08);color:var(--p)}
+.ab-g{border-color:rgba(255,71,87,.4);background:rgba(255,71,87,.08);color:var(--r)}
+.arch-label{
+  font-size:10px;color:var(--text-m);
+  text-align:center;font-family:var(--ff-m);
+}
+.arch-arrow{
+  display:flex;align-items:center;
+  color:var(--text-m);padding:0 6px;
+  margin-bottom:18px;font-size:14px;
+  flex-shrink:0;
+}
+
+/* ═══════════════════════════════════════════════
+   COMMAND GROUPS
+═══════════════════════════════════════════════ */
+.cmd-group{margin-bottom:52px}
+
+.cg-header{
+  display:flex;align-items:center;gap:12px;
+  margin-bottom:18px;
+  padding-bottom:14px;
+  border-bottom:1px solid var(--border);
+}
+.cg-icon{font-size:19px}
+.cg-title{
+  font-family:var(--ff-d);
+  font-size:17px;font-weight:700;
+  letter-spacing:-.2px;
+}
+.cg-badge{
+  display:inline-flex;align-items:center;
+  padding:2px 8px;border-radius:12px;
+  font-family:var(--ff-m);font-size:10px;font-weight:500;
+  border:1px solid;margin-left:auto;
+}
+
+.cmd-list{display:flex;flex-direction:column;gap:5px}
+
+.cmd-card{
+  background:var(--bg-card);
+  border:1px solid var(--border);
+  border-radius:var(--r8);
+  overflow:hidden;cursor:pointer;
+  transition:border-color var(--ease),box-shadow var(--ease);
+}
+.cmd-card:hover{
+  border-color:var(--border-c);
+  box-shadow:0 0 0 1px rgba(0,200,255,.06);
+}
+.cmd-card-top{
+  display:flex;align-items:center;gap:12px;
+  padding:13px 16px;
+  user-select:none;
+}
+.cmd-names{
+  display:flex;align-items:center;gap:6px;
+  flex-shrink:0;min-width:150px;
+}
+.cmd-p{
+  font-family:var(--ff-m);font-size:12.5px;font-weight:500;
+  color:var(--c);background:var(--c-dim);
+  padding:2px 8px;border-radius:4px;white-space:nowrap;
+}
+.cmd-a{
+  font-family:var(--ff-m);font-size:11px;
+  color:var(--text-m);background:rgba(255,255,255,.04);
+  padding:2px 6px;border-radius:3px;
+  border:1px solid var(--border);white-space:nowrap;
+}
+.cmd-desc{font-size:13px;color:var(--text-d);flex:1;line-height:1.5}
+.cmd-chevron{
+  color:var(--text-m);font-size:10px;flex-shrink:0;
+  transition:transform var(--ease);
+}
+.cmd-card.open .cmd-chevron{transform:rotate(90deg)}
+.cmd-card.open{border-color:var(--border-c)}
+
+.cmd-detail{
+  display:none;
+  padding:0 16px 14px;
+  border-top:1px solid var(--border);
+}
+.cmd-card.open .cmd-detail{display:block}
+.cmd-ex{
+  background:var(--bg);
+  border-radius:6px;
+  padding:13px 16px;
+  font-family:var(--ff-m);
+  font-size:12px;line-height:1.95;
+  margin-top:13px;
+  border:1px solid var(--border);
+}
+
+/* ═══════════════════════════════════════════════
+   QUICK REFERENCE
+═══════════════════════════════════════════════ */
+.qref{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(195px,1fr));
+  gap:7px;margin:24px 0;
+}
+.qr-item{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:9px 13px;
+  background:var(--bg-card);border:1px solid var(--border);
+  border-radius:var(--r8);
+  transition:all var(--ease);
+}
+.qr-item:hover{border-color:var(--border-c);background:var(--bg-e)}
+.qr-full{font-family:var(--ff-m);font-size:12px;color:var(--c)}
+.qr-sep{font-family:var(--ff-m);font-size:11px;color:var(--text-m);padding:0 5px}
+.qr-short{font-family:var(--ff-m);font-size:12px;color:var(--g)}
+
+/* ═══════════════════════════════════════════════
+   SECURITY GRID
+═══════════════════════════════════════════════ */
+.sec-grid{
+  display:grid;grid-template-columns:1fr 1fr;
+  gap:10px;margin:24px 0;
+}
+.sec-item{
+  display:flex;align-items:flex-start;gap:10px;
+  padding:14px 15px;
+  background:var(--bg-e);border:1px solid var(--border);
+  border-radius:var(--r8);font-size:13px;
+  transition:border-color var(--ease);
+}
+.sec-item:hover{border-color:rgba(0,232,154,.22)}
+.sec-ico{font-size:16px;flex-shrink:0;margin-top:1px}
+.sec-txt{color:var(--text-d)}
+.sec-txt strong{color:var(--text);display:block;font-size:12.5px;margin-bottom:2px}
+
+/* ═══════════════════════════════════════════════
+   ENV TABLE
+═══════════════════════════════════════════════ */
+.env-tbl{
+  width:100%;border-collapse:collapse;
+  margin:24px 0;border:1px solid var(--border);
+  border-radius:var(--r8);overflow:hidden;
+}
+.env-tbl th{
+  font-family:var(--ff-m);font-size:10px;
+  text-transform:uppercase;letter-spacing:.1em;
+  color:var(--text-m);
+  padding:11px 18px;
+  background:var(--bg-e);text-align:left;
+  border-bottom:1px solid var(--border);
+}
+.env-tbl td{
+  padding:11px 18px;
+  border-bottom:1px solid var(--border);
+  font-size:13.5px;
+}
+.env-tbl tr:last-child td{border-bottom:none}
+.env-tbl tr:hover td{background:rgba(255,255,255,.015)}
+.env-var{font-family:var(--ff-m);font-size:12.5px;color:var(--a)}
+
+/* ═══════════════════════════════════════════════
+   FOOTER
+═══════════════════════════════════════════════ */
+.footer{
+  margin-top:80px;
+  padding:32px 0 40px;
+  border-top:1px solid var(--border);
+}
+.foot-inner{
+  display:flex;align-items:center;
+  justify-content:space-between;
+  flex-wrap:wrap;gap:16px;
+}
+.foot-left{font-size:13px;color:var(--text-m)}
+.foot-left strong{color:var(--text-d)}
+.foot-links{display:flex;align-items:center;gap:18px}
+.foot-lnk{font-size:13px;color:var(--text-m);text-decoration:none;transition:color var(--ease)}
+.foot-lnk:hover{color:var(--c)}
+.foot-made{
+  margin-top:22px;text-align:center;
+  font-family:var(--ff-m);font-size:10.5px;
+  color:var(--text-m);
+  letter-spacing:.04em;
+}
+.foot-made em{color:var(--c);font-style:normal}
+
+/* ═══════════════════════════════════════════════
+   SCROLL REVEAL
+═══════════════════════════════════════════════ */
+.reveal{opacity:0;transform:translateY(14px);transition:opacity .45s ease,transform .45s ease}
+.reveal.vis{opacity:1;transform:none}
+
+/* ═══════════════════════════════════════════════
+   MOBILE NAV
+═══════════════════════════════════════════════ */
+.mob-nav{
+  display:none;position:sticky;top:0;z-index:200;
+  background:var(--bg-s);border-bottom:1px solid var(--border);
+  padding:13px 20px;align-items:center;justify-content:space-between;
+}
+.mob-logo{font-family:var(--ff-d);font-weight:800;font-size:16px}
+.mob-logo em{color:var(--c);font-style:normal}
+.mob-btn{background:none;border:none;color:var(--text-d);cursor:pointer;font-size:18px;padding:4px}
+.mob-drawer{
+  display:none;background:var(--bg-s);
+  border-bottom:1px solid var(--border);
+  padding:12px 0;max-height:70vh;overflow-y:auto;
+}
+.mob-drawer.open{display:block}
+
+/* ═══════════════════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════════════════ */
+@media(max-width:900px){
+  .sidebar{display:none}
+  .mob-nav{display:flex}
+  .layout{display:block}
+  .main{padding:0 24px 80px;max-width:100%}
+  .sec-grid{grid-template-columns:1fr}
+  .arch-box{font-size:10px;padding:8px 10px}
+  .arch-label{font-size:9.5px}
+  .cmd-names{min-width:auto}
+}
+@media(max-width:600px){
+  .hero-title{font-size:38px}
+  .qref{grid-template-columns:1fr 1fr}
+  .hero{padding:40px 0 56px}
+}
+</style>
+</head>
+<body>
+
+<div class="progress" id="prog"></div>
+
+<!-- ═══════ MOBILE NAV ═══════ -->
+<nav class="mob-nav" id="mobNav">
+  <div class="mob-logo">easy<em>-git</em></div>
+  <button class="mob-btn" id="menuBtn">☰</button>
+</nav>
+<div class="mob-drawer" id="menuDrawer">
+  <a class="sb-link sub" href="#installation">Installation</a>
+  <a class="sb-link sub" href="#architecture">Architecture</a>
+  <a class="sb-link sub" href="#setup">Setup</a>
+  <a class="sb-link sub" href="#daily">Daily Workflow</a>
+  <a class="sb-link sub" href="#branching">Branching</a>
+  <a class="sb-link sub" href="#recovery">Fixes & Recovery</a>
+  <a class="sb-link sub" href="#research">Research</a>
+  <a class="sb-link sub" href="#quickref">Quick Reference</a>
+  <a class="sb-link sub" href="#security">Security</a>
+  <a class="sb-link sub" href="#environment">Environment</a>
+  <a class="sb-link sub" href="#passthrough">Pass-through</a>
+</div>
+
+<div class="layout">
+
+<!-- ═══════ SIDEBAR ═══════ -->
+<aside class="sidebar">
+  <a class="sb-logo" href="#top">
+    <div class="sb-logo-name">easy<em>-git</em></div>
+    <div class="sb-logo-sub">
+      <span class="sb-ver-dot"></span>
+      v1.0.1 — stable
+    </div>
+  </a>
+  <nav class="sb-nav">
+    <div class="sb-label">Getting Started</div>
+    <a class="sb-link" data-nav="installation" href="#installation"><span class="dot"></span>Installation</a>
+    <a class="sb-link" data-nav="architecture" href="#architecture"><span class="dot"></span>Architecture</a>
+
+    <div class="sb-label">Commands</div>
+    <a class="sb-link sub" data-nav="setup" href="#setup"><span class="dot"></span>Setup</a>
+    <a class="sb-link sub" data-nav="daily" href="#daily"><span class="dot"></span>Daily Workflow</a>
+    <a class="sb-link sub" data-nav="branching" href="#branching"><span class="dot"></span>Branching &amp; History</a>
+    <a class="sb-link sub" data-nav="recovery" href="#recovery"><span class="dot"></span>Fixes &amp; Recovery</a>
+    <a class="sb-link sub" data-nav="research" href="#research"><span class="dot"></span>Research &amp; Housekeeping</a>
+
+    <div class="sb-label">Reference</div>
+    <a class="sb-link" data-nav="quickref" href="#quickref"><span class="dot"></span>Quick Reference</a>
+    <a class="sb-link" data-nav="security" href="#security"><span class="dot"></span>Security</a>
+    <a class="sb-link" data-nav="environment" href="#environment"><span class="dot"></span>Environment Variables</a>
+    <a class="sb-link" data-nav="passthrough" href="#passthrough"><span class="dot"></span>Pass-through</a>
+  </nav>
+</aside>
+
+<!-- ═══════ MAIN CONTENT ═══════ -->
+<main class="main" id="top">
+
+  <!-- ╔═══════════════════════════╗ -->
+  <!-- ║         HERO              ║ -->
+  <!-- ╚═══════════════════════════╝ -->
+  <section class="hero">
+    <div class="hero-glow"></div>
+
+    <div class="hero-eyebrow">CLI Documentation — v1.0.1</div>
+
+    <h1 class="hero-title">
+      easy-git <span class="g-token">( g )</span>
+    </h1>
+
+    <p class="hero-tagline">Git, without the ceremony.</p>
+    <p class="hero-sub">One smart command that replaces 20 memorized git spells. Works on macOS and Linux, bash 3.2+.</p>
+
+    <div class="hero-badges">
+      <span class="badge bc">⬡ v1.0.1</span>
+      <span class="badge bg">✓ Apache 2.0</span>
+      <span class="badge ba">◈ bash 3.2+</span>
+      <span class="badge bx">118 tests passing</span>
+      <span class="badge bx">★ No eval</span>
+    </div>
+
+    <!-- Terminal animation -->
+    <div class="terminal">
+      <div class="term-bar">
+        <div class="term-dot"></div>
+        <div class="term-dot"></div>
+        <div class="term-dot"></div>
+        <div class="term-label">easy-git — bash</div>
+      </div>
+      <div class="term-body" id="termBody">
+        <div class="tl"><span class="tp">$</span><span class="tc"> </span><span class="cursor"></span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ╔═══════════════════════════╗ -->
+  <!-- ║      INSTALLATION         ║ -->
+  <!-- ╚═══════════════════════════╝ -->
+  <section class="section reveal" id="installation" data-section="installation">
+    <div class="sec-label">Getting Started</div>
+    <h2 class="sec-title">Installation</h2>
+    <p class="sec-desc">Clone the repo, run the installer, and you're done. The tool is added to your PATH and available in every new shell session.</p>
+
+    <div class="cb">
+      <div class="cb-header"><span class="cb-lang">bash</span><button class="copy-btn">Copy</button></div>
+      <pre><span class="s-cm"># Clone</span>
+<span class="s-kw">git</span> clone https://github.com/ramyeshbt/easy-git.git
+<span class="s-kw">cd</span> easy-git
+
+<span class="s-cm"># Install (adds bin/ to PATH in ~/.bashrc or ~/.zshrc)</span>
+<span class="s-kw">bash</span> install.sh
+
+<span class="s-cm"># Open a new shell, then in any git repo:</span>
+<span class="s-kw">g</span> status
+<span class="s-kw">g</span> --doctor    <span class="s-cm"># verify all dependencies</span></pre>
+    </div>
+
+    <div class="callout cl-c">
+      <div class="callout-icon">ℹ</div>
+      <div>
+        <div class="callout-title">Idempotent installer</div>
+        <div class="callout-body">Running <code>bash install.sh</code> twice is safe — it won't duplicate PATH entries. To remove the tool completely, run <code>bash uninstall.sh</code>.</div>
+      </div>
+    </div>
+
+    <div class="callout cl-g">
+      <div class="callout-icon">◎</div>
+      <div>
+        <div class="callout-title">Optional dependencies</div>
+        <div class="callout-body"><code>fzf</code> enables fuzzy branch/stash search. <code>gh</code> (GitHub CLI) enables PR creation. Both are optional — the tool gracefully degrades without them.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ╔═══════════════════════════╗ -->
+  <!-- ║      ARCHITECTURE         ║ -->
+  <!-- ╚═══════════════════════════╝ -->
+  <section class="section reveal" id="architecture" data-section="architecture">
+    <div class="sec-label">Design</div>
+    <h2 class="sec-title">Architecture</h2>
+    <p class="sec-desc">A single entry point routes every subcommand to a dedicated script. All scripts share one core library — no hidden globals, no side effects.</p>
+
+    <div class="arch-wrap">
+      <div class="arch-flow">
+        <div class="arch-node">
+          <div class="arch-box ab-u">g commit</div>
+          <div class="arch-label">User input</div>
+        </div>
+        <div class="arch-arrow">──▶</div>
+        <div class="arch-node">
+          <div class="arch-box ab-e">bin/g</div>
+          <div class="arch-label">Entry point</div>
+        </div>
+        <div class="arch-arrow">──▶</div>
+        <div class="arch-node">
+          <div class="arch-box ab-l">lib/commit.sh</div>
+          <div class="arch-label">Subcommand</div>
+        </div>
+        <div class="arch-arrow">──▶</div>
+        <div class="arch-node">
+          <div class="arch-box ab-c">lib/core.sh</div>
+          <div class="arch-label">Shared utils</div>
+        </div>
+        <div class="arch-arrow">──▶</div>
+        <div class="arch-node">
+          <div class="arch-box ab-g">git</div>
+          <div class="arch-label">Git CLI</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec-grid" style="margin-top:0">
+      <div class="sec-item">
+        <div class="sec-ico">⬡</div>
+        <div class="sec-txt">
+          <strong>Single entry point</strong>
+          <code>bin/g</code> dispatches to <code>lib/&lt;cmd&gt;.sh</code> — adding a subcommand is one file + one dispatch line.
+        </div>
+      </div>
+      <div class="sec-item">
+        <div class="sec-ico">◈</div>
+        <div class="sec-txt">
+          <strong>Shared core</strong>
+          Every lib script sources <code>lib/core.sh</code> for colors, TTY-safe I/O, confirm prompts, and dry-run support.
+        </div>
+      </div>
+      <div class="sec-item">
+        <div class="sec-ico">✦</div>
+        <div class="sec-txt">
+          <strong>Graceful degradation</strong>
+          fzf absent → numbered list. gh absent → PR URL skipped. The tool always works at a basic level.
+        </div>
+      </div>
+      <div class="sec-item">
+        <div class="sec-ico">◎</div>
+        <div class="sec-txt">
+          <strong>Bash 3.2+ compatible</strong>
+          macOS ships bash 3.2. No <code>${var,}</code>, no <code>declare -A</code>, no <code>readarray</code> — verified by CI on every commit.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ╔═══════════════════════════╗ -->
+  <!-- ║    COMMANDS — SETUP       ║ -->
+  <!-- ╚═══════════════════════════╝ -->
+  <section class="section reveal" id="setup" data-section="setup">
+    <div class="sec-label">Commands</div>
+    <h2 class="sec-title">Command Reference</h2>
+    <p class="sec-desc">Click any command to see an example. All commands support <code>-h</code> / <code>--help</code>.</p>
+
+    <div class="cmd-group" style="margin-top:36px">
+      <div class="cg-header">
+        <div class="cg-icon">🚀</div>
+        <div class="cg-title">Setup</div>
+        <span class="cg-badge bc">1 command</span>
+      </div>
+      <div class="cmd-list">
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g init</span><span class="cmd-a">g i</span></div>
+            <div class="cmd-desc">Guided wizard: identity · branch name · .gitignore · README · initial commit</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span class="tck">?</span> Git name: <span style="color:var(--c)">Jane Doe</span><br>
+<span class="tck">?</span> Git email: <span style="color:var(--c)">jane@example.com</span><br>
+<span class="tck">?</span> Default branch: <span style="color:var(--c)">main</span><br>
+<span class="tck">?</span> .gitignore template: <span style="color:var(--c)">Node</span><br>
+<span class="tck">?</span> Create README? <span style="color:var(--c)">y</span><br>
+<span class="tck">✓</span> <span style="color:var(--g)">Repository initialized on branch 'main'</span><br>
+<span class="tar">→</span> Run <span style="color:var(--c)">g commit</span> to make your first commit
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Daily Workflow ── -->
+    <div class="cmd-group" id="daily" data-section="daily">
+      <div class="cg-header">
+        <div class="cg-icon">⚡</div>
+        <div class="cg-title">Daily Workflow</div>
+        <span class="cg-badge bc">6 commands</span>
+      </div>
+      <div class="cmd-list">
+
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g commit</span><span class="cmd-a">g c</span></div>
+            <div class="cmd-desc">Interactive conventional commit builder with secret detection pre-commit</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span class="tck">?</span> Commit type: <span style="color:var(--c)">feat</span><br>
+<span class="tck">?</span> Scope (optional): <span style="color:var(--c)">auth</span><br>
+<span class="tck">?</span> Short message: <span style="color:var(--c)">add OAuth2 login flow</span><br>
+<span class="tck">✓</span> <span style="color:var(--g)">Committed: feat(auth): add OAuth2 login flow</span><br>
+<span class="tar">→</span> Run <span style="color:var(--c)">g push</span> to push your changes
+            </div>
+          </div>
+        </div>
+
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g push</span><span class="cmd-a">g p</span></div>
+            <div class="cmd-desc">Push with auto-upstream detection, optional PR creation, protected branch warnings</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span class="tar">→</span> Pushing to <span style="color:var(--c)">origin/feature/auth</span>...<br>
+<span class="tck">✓</span> <span style="color:var(--g)">Pushed! (set upstream)</span><br>
+<span class="tar">→</span> Open PR: github.com/you/repo/compare/feature/auth
+            </div>
+          </div>
+        </div>
+
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g sync</span><span class="cmd-a">g sy</span></div>
+            <div class="cmd-desc">Stash → fetch → rebase onto main → pop stash. Safe sync without losing work</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span class="tar">→</span> Stashing 2 changes...<br>
+<span class="tar">→</span> Fetching from origin/main... (4 new commits)<br>
+<span class="tar">→</span> Rebasing onto main...<br>
+<span class="tar">→</span> Restoring stash...<br>
+<span class="tck">✓</span> <span style="color:var(--g)">Synced with main</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g status</span><span class="cmd-a">g s</span></div>
+            <div class="cmd-desc">Enhanced status with context-aware hints for next steps</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span class="tck">✓</span> On branch: <span style="color:var(--c)">feature/auth</span><br>
+<span class="tar">→</span> <span style="color:var(--g)">2 staged</span>, <span style="color:var(--a)">1 unstaged</span>, 0 untracked<br>
+<span style="color:var(--text-m)">  staged:   src/auth.sh</span><br>
+<span style="color:var(--text-m)">  staged:   tests/test_auth.sh</span><br>
+<span style="color:var(--a)">  modified: README.md</span><br>
+<span class="tar">→</span> Hint: run <span style="color:var(--c)">g commit</span> to commit staged files
+            </div>
+          </div>
+        </div>
+
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g diff</span><span class="cmd-a">g d</span></div>
+            <div class="cmd-desc">Diff unstaged / staged (<code>--staged</code>) / versus a branch</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span class="s-cm"># Unstaged changes</span><br>
+<span style="color:var(--c)">g diff</span><br>
+<span class="s-cm"># Only staged changes</span><br>
+<span style="color:var(--c)">g diff --staged</span><br>
+<span class="s-cm"># vs. another branch</span><br>
+<span style="color:var(--c)">g diff main</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g log</span><span class="cmd-a">g l</span></div>
+            <div class="cmd-desc">Pretty colored graph log — no flags needed</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span style="color:var(--g)">*</span> <span style="color:var(--a)">e376253</span> <span style="color:var(--c)">(HEAD → main)</span> chore: release v1.0.1<br>
+<span style="color:var(--g)">*</span> <span style="color:var(--a)">8f2ba96</span> fix: three pre-existing bugs in undo.sh<br>
+<span style="color:var(--g)">*</span> <span style="color:var(--a)">cbb3693</span> fix: resolve TTY detection bugs<br>
+<span style="color:var(--g)">*</span> <span style="color:var(--a)">d937af4</span> fix: color output, stash UX, tag ordering
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── Branching & History ── -->
+    <div class="cmd-group" id="branching" data-section="branching">
+      <div class="cg-header">
+        <div class="cg-icon">🌿</div>
+        <div class="cg-title">Branching &amp; History</div>
+        <span class="cg-badge bc">4 commands</span>
+      </div>
+      <div class="cmd-list">
+
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g branch</span><span class="cmd-a">g b</span></div>
+            <div class="cmd-desc">Create, switch, or delete branches. Uses fuzzy search if fzf is available</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span class="s-cm"># Create and switch</span><br>
+<span style="color:var(--c)">g branch feature/payments</span><br><br>
+<span class="s-cm"># Fuzzy switch (interactive)</span><br>
+<span style="color:var(--c)">g branch</span><br><br>
+<span class="s-cm"># Delete merged branch</span><br>
+<span style="color:var(--c)">g branch -d feature/old</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g squash</span><span class="cmd-a">g sq</span></div>
+            <div class="cmd-desc">Squash WIP commits into a single clean commit before merging</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span class="tar">→</span> You have <span style="color:var(--a)">4 commits</span> ahead of main:<br>
+<span style="color:var(--text-m)">  wip: start feature</span><br>
+<span style="color:var(--text-m)">  wip: more work</span><br>
+<span style="color:var(--text-m)">  fix typo</span><br>
+<span style="color:var(--text-m)">  cleanup</span><br>
+<span class="tck">?</span> New commit message: <span style="color:var(--c)">feat: add payment integration</span><br>
+<span class="tck">✓</span> <span style="color:var(--g)">Squashed 4 commits into 1</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g revert</span><span class="cmd-a">g rv</span></div>
+            <div class="cmd-desc">Undo a pushed commit safely — creates a new revert commit, doesn't rewrite history</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span class="tar">→</span> Reverting: <span style="color:var(--c)">abc1234</span> feat(auth): add OAuth2 login<br>
+<span class="tck">?</span> Confirm revert? <span style="color:var(--c)">[y/N]</span> y<br>
+<span class="tck">✓</span> <span style="color:var(--g)">Reverted — new commit: Revert "feat(auth): add OAuth2 login"</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g tag</span><span class="cmd-a">g t</span></div>
+            <div class="cmd-desc">Create, list, delete, and push annotated release tags</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span class="s-cm"># Create annotated tag</span><br>
+<span style="color:var(--c)">g tag v1.2.0 -m "Stable release"</span><br><br>
+<span class="s-cm"># List all tags</span><br>
+<span style="color:var(--c)">g tag</span><br><br>
+<span class="s-cm"># Push tag to remote</span><br>
+<span style="color:var(--c)">g tag --push v1.2.0</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── Fixes & Recovery ── -->
+    <div class="cmd-group" id="recovery" data-section="recovery">
+      <div class="cg-header">
+        <div class="cg-icon">🔧</div>
+        <div class="cg-title">Fixes &amp; Recovery</div>
+        <span class="cg-badge ba">3 commands</span>
+      </div>
+      <div class="cmd-list">
+
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g undo</span><span class="cmd-a">g u</span></div>
+            <div class="cmd-desc">Safe undo with preview — commit, push, or file. Never destructive without confirmation</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span class="s-cm"># Undo last commit (keep changes unstaged)</span><br>
+<span style="color:var(--c)">g undo commit</span><br><br>
+<span class="s-cm"># Keep changes staged</span><br>
+<span style="color:var(--c)">g undo commit --soft</span><br><br>
+<span class="s-cm"># Discard changes (irreversible)</span><br>
+<span style="color:var(--c)">g undo commit --hard</span><br><br>
+<span class="s-cm"># Skip confirmation (CI / non-interactive)</span><br>
+<span style="color:var(--c)">g undo commit --yes</span><br><br>
+<span class="s-cm"># Restore a single file</span><br>
+<span style="color:var(--c)">g undo file src/main.sh</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g conflict</span><span class="cmd-a">g cf</span></div>
+            <div class="cmd-desc">Guided conflict resolution for merge, rebase, and cherry-pick states</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span class="twn">⚠</span> Merge conflict in 2 files:<br>
+<span style="color:var(--r)">  ✗ src/auth.sh</span><br>
+<span style="color:var(--r)">  ✗ tests/test_auth.sh</span><br>
+<span class="tar">→</span> Options: edit · resolve · abort<br>
+<span style="color:var(--c)">g conflict edit src/auth.sh</span><br>
+<span style="color:var(--c)">g conflict resolve src/auth.sh</span><br>
+<span style="color:var(--c)">g conflict abort</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g reflog</span><span class="cmd-a">g rl</span></div>
+            <div class="cmd-desc">Show reflog with a recovery wizard for lost commits or deleted branches</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span class="s-cm"># Show reflog</span><br>
+<span style="color:var(--c)">g reflog</span><br><br>
+<span class="s-cm"># Guided recovery wizard</span><br>
+<span style="color:var(--c)">g reflog --recover</span><br>
+<span class="tck">?</span> Recover: <span style="color:var(--c)">lost branch 'feature/payments'</span><br>
+<span class="tck">✓</span> <span style="color:var(--g)">Branch restored at abc1234</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ── Research & Housekeeping ── -->
+    <div class="cmd-group" id="research" data-section="research">
+      <div class="cg-header">
+        <div class="cg-icon">🔬</div>
+        <div class="cg-title">Research &amp; Housekeeping</div>
+        <span class="cg-badge bx">7 commands</span>
+      </div>
+      <div class="cmd-list">
+
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g search</span><span class="cmd-a">g sr</span></div>
+            <div class="cmd-desc">Search commit messages and code changes across history</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span class="s-cm"># Search commit messages</span><br>
+<span style="color:var(--c)">g search "OAuth"</span><br><br>
+<span class="s-cm"># Search code changes (added/removed lines)</span><br>
+<span style="color:var(--c)">g search --code "client_secret"</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g blame</span><span class="cmd-a">g bl</span></div>
+            <div class="cmd-desc">Enhanced git blame — who wrote each line, with author and date context</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span style="color:var(--c)">g blame src/auth.sh</span><br>
+<span style="color:var(--text-m)">abc1234 (Jane Doe   2026-03-12) 14 | confirm() {</span><br>
+<span style="color:var(--text-m)">d937af4 (ramyeshbt  2026-04-05) 15 |   if [ -t 0 ]; then</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g stash</span></div>
+            <div class="cmd-desc">Named stash management — save, pop, list, drop, show</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span style="color:var(--c)">g stash save "WIP: payment form"</span><br>
+<span style="color:var(--c)">g stash list</span><br>
+<span style="color:var(--c)">g stash pop stash@{0}</span><br>
+<span style="color:var(--c)">g stash show stash@{0}</span><br>
+<span style="color:var(--c)">g stash drop stash@{0}</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g clean</span><span class="cmd-a">g cl</span></div>
+            <div class="cmd-desc">Remove merged branches and branches whose remote is gone</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span class="tar">→</span> Scanning for merged branches...<br>
+<span style="color:var(--text-m)">  merged: feature/auth — c1e8354</span><br>
+<span style="color:var(--text-m)">  merged: fix/typo — 4a2b123</span><br>
+<span class="tck">?</span> Delete 2 branch(es)? <span style="color:var(--c)">[y/N]</span> y<br>
+<span class="tck">✓</span> <span style="color:var(--g)">Cleaned up 2 branches</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g ignore</span><span class="cmd-a">g gi</span></div>
+            <div class="cmd-desc">Add patterns to .gitignore, view current rules, or generate from a template</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span style="color:var(--c)">g ignore node_modules</span><br>
+<span style="color:var(--c)">g ignore .env</span><br>
+<span style="color:var(--c)">g ignore --list</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g pr</span></div>
+            <div class="cmd-desc">Open or create pull requests via the GitHub CLI (requires <code>gh</code>)</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span style="color:var(--c)">g pr create</span>         <span class="s-cm"># create PR for current branch</span><br>
+<span style="color:var(--c)">g pr open</span>           <span class="s-cm"># open current PR in browser</span><br>
+<span style="color:var(--c)">g pr status</span>         <span class="s-cm"># show CI status</span><br>
+<span style="color:var(--c)">g pr checkout 42</span>    <span class="s-cm"># checkout PR #42</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="cmd-card">
+          <div class="cmd-card-top">
+            <div class="cmd-names"><span class="cmd-p">g --doctor</span></div>
+            <div class="cmd-desc">Check git identity, tool versions, and optional dependency availability</div>
+            <span class="cmd-chevron">▶</span>
+          </div>
+          <div class="cmd-detail">
+            <div class="cmd-ex">
+<span class="tck">✓</span>  git — git version 2.53.0<br>
+<span class="tck">✓</span>  bash — GNU bash, version 5.2.37<br>
+<span style="color:var(--text-m)">○  fzf — not installed (optional)</span><br>
+<span class="tck">✓</span>  gh — gh version 2.89.0<br>
+<span class="tck">✓</span>  Git identity: you &lt;you@example.com&gt;
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ╔═══════════════════════════╗ -->
+  <!-- ║    QUICK REFERENCE        ║ -->
+  <!-- ╚═══════════════════════════╝ -->
+  <section class="section reveal" id="quickref" data-section="quickref">
+    <div class="sec-label">Reference</div>
+    <h2 class="sec-title">Quick Reference</h2>
+    <p class="sec-desc">All short aliases — every command has a 1-2 letter shorthand.</p>
+
+    <div class="qref">
+      <div class="qr-item"><span class="qr-full">g init</span><span class="qr-sep">→</span><span class="qr-short">g i</span></div>
+      <div class="qr-item"><span class="qr-full">g commit</span><span class="qr-sep">→</span><span class="qr-short">g c</span></div>
+      <div class="qr-item"><span class="qr-full">g push</span><span class="qr-sep">→</span><span class="qr-short">g p</span></div>
+      <div class="qr-item"><span class="qr-full">g sync</span><span class="qr-sep">→</span><span class="qr-short">g sy</span></div>
+      <div class="qr-item"><span class="qr-full">g status</span><span class="qr-sep">→</span><span class="qr-short">g s</span></div>
+      <div class="qr-item"><span class="qr-full">g diff</span><span class="qr-sep">→</span><span class="qr-short">g d</span></div>
+      <div class="qr-item"><span class="qr-full">g log</span><span class="qr-sep">→</span><span class="qr-short">g l</span></div>
+      <div class="qr-item"><span class="qr-full">g branch</span><span class="qr-sep">→</span><span class="qr-short">g b</span></div>
+      <div class="qr-item"><span class="qr-full">g squash</span><span class="qr-sep">→</span><span class="qr-short">g sq</span></div>
+      <div class="qr-item"><span class="qr-full">g revert</span><span class="qr-sep">→</span><span class="qr-short">g rv</span></div>
+      <div class="qr-item"><span class="qr-full">g tag</span><span class="qr-sep">→</span><span class="qr-short">g t</span></div>
+      <div class="qr-item"><span class="qr-full">g undo</span><span class="qr-sep">→</span><span class="qr-short">g u</span></div>
+      <div class="qr-item"><span class="qr-full">g conflict</span><span class="qr-sep">→</span><span class="qr-short">g cf</span></div>
+      <div class="qr-item"><span class="qr-full">g reflog</span><span class="qr-sep">→</span><span class="qr-short">g rl</span></div>
+      <div class="qr-item"><span class="qr-full">g search</span><span class="qr-sep">→</span><span class="qr-short">g sr</span></div>
+      <div class="qr-item"><span class="qr-full">g blame</span><span class="qr-sep">→</span><span class="qr-short">g bl</span></div>
+      <div class="qr-item"><span class="qr-full">g clean</span><span class="qr-sep">→</span><span class="qr-short">g cl</span></div>
+      <div class="qr-item"><span class="qr-full">g ignore</span><span class="qr-sep">→</span><span class="qr-short">g gi</span></div>
+    </div>
+  </section>
+
+  <!-- ╔═══════════════════════════╗ -->
+  <!-- ║       SECURITY            ║ -->
+  <!-- ╚═══════════════════════════╝ -->
+  <section class="section reveal" id="security" data-section="security">
+    <div class="sec-label">Security</div>
+    <h2 class="sec-title">Security Model</h2>
+    <p class="sec-desc">easy-git applies defense-in-depth to prevent accidental data loss and credential leakage.</p>
+
+    <div class="callout cl-r" style="margin-top:28px">
+      <div class="callout-icon">🛡</div>
+      <div>
+        <div class="callout-title">Zero eval policy</div>
+        <div class="callout-body">There is no <code>eval</code> anywhere in the codebase. Dynamic dispatch uses <code>case</code> statements only. Verified by <code>grep -r 'eval '</code> in CI on every commit.</div>
+      </div>
+    </div>
+
+    <div class="sec-grid">
+      <div class="sec-item">
+        <div class="sec-ico">🔑</div>
+        <div class="sec-txt">
+          <strong>Secret detection pre-commit</strong>
+          Blocks commits containing AWS keys (<code>AKIA…</code>), GitHub tokens (<code>ghp_…</code>), GitLab tokens, npm tokens, private key headers, DB URIs with credentials, JWT tokens, and sensitive filenames (<code>.env</code>, <code>.pem</code>, <code>*_rsa</code>, etc.)
+        </div>
+      </div>
+      <div class="sec-item">
+        <div class="sec-ico">🌿</div>
+        <div class="sec-txt">
+          <strong>Branch name sanitization</strong>
+          Input is passed through a whitelist: <code>[a-zA-Z0-9._/-]</code> only. Leading dashes, <code>.lock</code> suffix, and shell metacharacters are stripped before any git command is run.
+        </div>
+      </div>
+      <div class="sec-item">
+        <div class="sec-ico">🛑</div>
+        <div class="sec-txt">
+          <strong>Protected branch warnings</strong>
+          Pushing to <code>main</code>, <code>master</code>, <code>develop</code>, <code>release</code>, <code>production</code>, or <code>staging</code> triggers a prominent warning and requires explicit confirmation.
+        </div>
+      </div>
+      <div class="sec-item">
+        <div class="sec-ico">⚓</div>
+        <div class="sec-txt">
+          <strong>--force-with-lease only</strong>
+          No command ever uses <code>git push --force</code>. All force-push paths use <code>--force-with-lease</code> to prevent overwriting others' work on shared branches.
+        </div>
+      </div>
+      <div class="sec-item">
+        <div class="sec-ico">🔒</div>
+        <div class="sec-txt">
+          <strong>-- separator enforcement</strong>
+          All git commands that accept user-supplied refs use <code>--</code> to separate options from arguments, preventing flag injection via branch names or filenames.
+        </div>
+      </div>
+      <div class="sec-item">
+        <div class="sec-ico">📺</div>
+        <div class="sec-txt">
+          <strong>TTY-safe I/O</strong>
+          All interactive reads use a <code>[ -t 0 ]</code> guard with stdin fallback — no crashes in CI, Docker, or VS Code integrated terminals. Verified in the test suite.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ╔═══════════════════════════╗ -->
+  <!-- ║    ENVIRONMENT VARS       ║ -->
+  <!-- ╚═══════════════════════════╝ -->
+  <section class="section reveal" id="environment" data-section="environment">
+    <div class="sec-label">Configuration</div>
+    <h2 class="sec-title">Environment Variables</h2>
+    <p class="sec-desc">Control tool behavior with shell environment variables — no config file needed.</p>
+
+    <table class="env-tbl">
+      <thead>
+        <tr>
+          <th>Variable</th>
+          <th>Effect</th>
+          <th>Example</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="env-var">G_DRY_RUN=1</span></td>
+          <td>Preview all commands without executing — prints <code>[dry-run] git …</code></td>
+          <td><code>G_DRY_RUN=1 g sync</code></td>
+        </tr>
+        <tr>
+          <td><span class="env-var">G_NO_COLOR=1</span></td>
+          <td>Disable all color output (auto-disabled when stdout is not a TTY)</td>
+          <td><code>G_NO_COLOR=1 g log</code></td>
+        </tr>
+        <tr>
+          <td><span class="env-var">VERBOSE=1</span></td>
+          <td>Verbose output in the test runner — prints each individual assertion</td>
+          <td><code>VERBOSE=1 bash tests/run_tests.sh</code></td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="callout cl-a">
+      <div class="callout-icon">◈</div>
+      <div>
+        <div class="callout-title">Dry-run in CI pipelines</div>
+        <div class="callout-body"><code>G_DRY_RUN=1</code> is useful for validating what <code>g sync</code> or <code>g push</code> would do inside a CI job without actually modifying the remote. Combine with <code>VERBOSE=1</code> for maximum debug output.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ╔═══════════════════════════╗ -->
+  <!-- ║     PASS-THROUGH          ║ -->
+  <!-- ╚═══════════════════════════╝ -->
+  <section class="section reveal" id="passthrough" data-section="passthrough">
+    <div class="sec-label">Compatibility</div>
+    <h2 class="sec-title">Pass-through</h2>
+    <p class="sec-desc">Any command that easy-git doesn't recognize is passed directly to git. You never lose access to the full git surface.</p>
+
+    <div class="cb">
+      <div class="cb-header"><span class="cb-lang">bash</span><button class="copy-btn">Copy</button></div>
+      <pre><span class="s-cm"># These all work transparently:</span>
+<span class="s-kw">g</span> cherry-pick abc123   <span class="s-cm"># → git cherry-pick abc123</span>
+<span class="s-kw">g</span> bisect start         <span class="s-cm"># → git bisect start</span>
+<span class="s-kw">g</span> rebase -i HEAD~5     <span class="s-cm"># → git rebase -i HEAD~5</span>
+<span class="s-kw">g</span> worktree list        <span class="s-cm"># → git worktree list</span>
+<span class="s-kw">g</span> submodule update     <span class="s-cm"># → git submodule update</span>
+<span class="s-kw">g</span> diff HEAD~3          <span class="s-cm"># → git diff HEAD~3</span></pre>
+    </div>
+
+    <div class="callout cl-g">
+      <div class="callout-icon">✦</div>
+      <div>
+        <div class="callout-title">Zero lock-in</div>
+        <div class="callout-body">easy-git is purely additive. Every git command you already know keeps working as-is. The tool enhances the most common 20 workflows; everything else passes through unchanged.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════ FOOTER ═══════ -->
+  <footer class="footer">
+    <div class="foot-inner">
+      <div class="foot-left">
+        <strong>easy-git</strong> · Apache 2.0 License
+      </div>
+      <div class="foot-links">
+        <a class="foot-lnk" href="https://github.com/ramyeshbt/easy-git">GitHub</a>
+        <a class="foot-lnk" href="https://github.com/ramyeshbt/easy-git/releases">Releases</a>
+        <a class="foot-lnk" href="https://github.com/ramyeshbt/easy-git/issues">Issues</a>
+      </div>
+    </div>
+    <div class="foot-made">
+      Built by <em>ramyeshbt</em> · Assisted by Claude Sonnet 4.6 (Anthropic) · v1.0.1
+    </div>
+  </footer>
+
+</main>
+</div><!-- /layout -->
+
+<script>
+/* ═══════════════════════════════════════════════
+   PROGRESS BAR
+═══════════════════════════════════════════════ */
+const prog = document.getElementById('prog');
+window.addEventListener('scroll', () => {
+  const pct = window.scrollY / (document.body.scrollHeight - window.innerHeight) * 100;
+  prog.style.width = pct + '%';
+}, { passive: true });
+
+/* ═══════════════════════════════════════════════
+   MOBILE MENU
+═══════════════════════════════════════════════ */
+document.getElementById('menuBtn').addEventListener('click', () => {
+  const d = document.getElementById('menuDrawer');
+  d.classList.toggle('open');
+});
+
+/* ═══════════════════════════════════════════════
+   SCROLL SPY
+═══════════════════════════════════════════════ */
+const navLinks = document.querySelectorAll('[data-nav]');
+const sections = document.querySelectorAll('[data-section]');
+
+const spy = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      const id = e.target.dataset.section;
+      navLinks.forEach(l => l.classList.toggle('active', l.dataset.nav === id));
+    }
+  });
+}, { rootMargin: '-15% 0% -70% 0%', threshold: 0 });
+
+sections.forEach(s => spy.observe(s));
+
+/* ═══════════════════════════════════════════════
+   SCROLL REVEAL
+═══════════════════════════════════════════════ */
+const reveals = document.querySelectorAll('.reveal');
+const ro = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add('vis'); ro.unobserve(e.target); }
+  });
+}, { threshold: 0.07 });
+reveals.forEach(el => ro.observe(el));
+
+/* ═══════════════════════════════════════════════
+   COMMAND CARD EXPAND
+═══════════════════════════════════════════════ */
+document.querySelectorAll('.cmd-card').forEach(card => {
+  card.addEventListener('click', () => card.classList.toggle('open'));
+});
+
+/* ═══════════════════════════════════════════════
+   COPY BUTTONS
+═══════════════════════════════════════════════ */
+document.querySelectorAll('.copy-btn').forEach(btn => {
+  btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const code = btn.closest('.cb').querySelector('pre').innerText;
+    navigator.clipboard.writeText(code).then(() => {
+      btn.textContent = '✓ Copied';
+      btn.classList.add('ok');
+      setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('ok'); }, 2000);
+    }).catch(() => {
+      btn.textContent = 'Copy';
+    });
+  });
+});
+
+/* ═══════════════════════════════════════════════
+   TERMINAL ANIMATION
+═══════════════════════════════════════════════ */
+const termBody = document.getElementById('termBody');
+
+const scenes = [
+  {
+    cmd: 'g status',
+    out: [
+      '<span style="color:var(--g)">✓</span> On branch: <span style="color:var(--c)">feature/auth</span>',
+      '<span style="color:var(--c)">→</span> <span style="color:var(--g)">2 staged</span>, <span style="color:var(--a)">1 unstaged</span>',
+      '<span style="color:var(--text-m)">  Hint: run g commit to commit staged files</span>',
+    ]
+  },
+  {
+    cmd: 'g commit',
+    out: [
+      '<span style="color:var(--g)">?</span> Type: <span style="color:var(--c)">feat</span>',
+      '<span style="color:var(--g)">?</span> Scope: <span style="color:var(--c)">auth</span>',
+      '<span style="color:var(--g)">?</span> Message: <span style="color:var(--c)">add OAuth2 login flow</span>',
+      '<span style="color:var(--g)">✓</span> Committed: <span style="color:var(--g)">feat(auth): add OAuth2 login flow</span>',
+      '<span style="color:var(--c)">→</span> <span style="color:var(--text-m)">Run g push to push your changes</span>',
+    ]
+  },
+  {
+    cmd: 'g sync',
+    out: [
+      '<span style="color:var(--c)">→</span> Stashing 1 change...',
+      '<span style="color:var(--c)">→</span> Fetching from origin/main... (3 new commits)',
+      '<span style="color:var(--c)">→</span> Rebasing onto main...',
+      '<span style="color:var(--c)">→</span> Restoring stash...',
+      '<span style="color:var(--g)">✓</span> <span style="color:var(--g)">Synced with main</span>',
+    ]
+  },
+  {
+    cmd: 'g clean',
+    out: [
+      '<span style="color:var(--c)">→</span> Scanning for merged branches...',
+      '<span style="color:var(--text-m)">  merged: feature/auth — c1e8354</span>',
+      '<span style="color:var(--text-m)">  merged: fix/typo    — 4a2b123</span>',
+      '<span style="color:var(--g)">?</span> Delete 2 branch(es)? [y/N] <span style="color:var(--c)">y</span>',
+      '<span style="color:var(--g)">✓</span> <span style="color:var(--g)">Cleaned up 2 branches</span>',
+    ]
+  }
+];
+
+let scene = 0;
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+async function typeStr(span, text, speed = 52) {
+  for (const ch of text) {
+    span.textContent += ch;
+    await sleep(speed + Math.random() * 25 - 10);
+  }
+}
+
+async function runScene(s) {
+  termBody.innerHTML = '';
+
+  // prompt line
+  const line = document.createElement('div');
+  line.className = 'tl';
+  const prompt = document.createElement('span');
+  prompt.className = 'tp';
+  prompt.textContent = '$ ';
+  const cmdSpan = document.createElement('span');
+  cmdSpan.className = 'tc';
+  const cur = document.createElement('span');
+  cur.className = 'cursor';
+  line.append(prompt, cmdSpan, cur);
+  termBody.appendChild(line);
+
+  await sleep(350);
+  await typeStr(cmdSpan, s.cmd);
+  cur.remove();
+
+  await sleep(280);
+
+  for (const html of s.out) {
+    await sleep(120);
+    const div = document.createElement('div');
+    div.className = 'to';
+    div.innerHTML = html;
+    termBody.appendChild(div);
+  }
+
+  // next prompt
+  await sleep(2200);
+  const nl = document.createElement('div');
+  nl.className = 'tl';
+  const np = document.createElement('span');
+  np.className = 'tp';
+  np.textContent = '$ ';
+  const nc = document.createElement('span');
+  nc.className = 'cursor';
+  nl.append(np, nc);
+  termBody.appendChild(nl);
+  await sleep(900);
+}
+
+(async function loop() {
+  while (true) {
+    await runScene(scenes[scene]);
+    scene = (scene + 1) % scenes.length;
+  }
+})();
+</script>
+</body>
+</html>
