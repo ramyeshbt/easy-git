@@ -156,7 +156,7 @@ build_commit_message() {
 
   local choice
   printf "%b" "\n${YELLOW}?${RESET} Type [1-${#COMMIT_TYPES[@]}]: "
-  read -r choice </dev/tty
+  if [ -t 0 ]; then read -r choice </dev/tty; else read -r choice; fi
 
   if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "${#COMMIT_TYPES[@]}" ]; then
     type="${type_keys[$((choice-1))]}"
@@ -184,7 +184,7 @@ build_commit_message() {
   if confirm "Is this a breaking change?"; then
     breaking_flag="!"
     echo -e "${YELLOW}?${RESET} Describe the breaking change:"
-    read -r breaking </dev/tty
+    if [ -t 0 ]; then read -r breaking </dev/tty; else read -r breaking; fi
   fi
 
   # Assemble the commit message header
@@ -198,10 +198,17 @@ build_commit_message() {
   # Step 5: Optional body
   echo -e "\n${CYAN}?${RESET} Body (optional, press Enter to skip, Ctrl+D when done):"
   local body_lines=()
-  while IFS= read -r line </dev/tty; do
-    [ -z "$line" ] && break
-    body_lines+=("$line")
-  done 2>/dev/null || true
+  if [ -t 0 ]; then
+    while IFS= read -r line </dev/tty; do
+      [ -z "$line" ] && break
+      body_lines+=("$line")
+    done 2>/dev/null || true
+  else
+    while IFS= read -r line; do
+      [ -z "$line" ] && break
+      body_lines+=("$line")
+    done
+  fi
 
   # Assemble full message
   local full_message="$header"

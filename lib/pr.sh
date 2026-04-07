@@ -78,10 +78,17 @@ pr_create() {
 
   echo -e "\n${CYAN}?${RESET} PR description (optional, press Enter to skip, Ctrl+D when done):"
   local body_lines=()
-  while IFS= read -r line </dev/tty; do
-    [ -z "$line" ] && break
-    body_lines+=("$line")
-  done 2>/dev/null || true
+  if [ -t 0 ]; then
+    while IFS= read -r line </dev/tty; do
+      [ -z "$line" ] && break
+      body_lines+=("$line")
+    done 2>/dev/null || true
+  else
+    while IFS= read -r line; do
+      [ -z "$line" ] && break
+      body_lines+=("$line")
+    done
+  fi
   body=$(printf '%s\n' "${body_lines[@]}")
 
   local draft=0

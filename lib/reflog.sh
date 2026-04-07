@@ -49,7 +49,7 @@ reflog_recover() {
 
   local choice
   printf "%b" "${YELLOW}?${RESET} Choose [1-3]: "
-  read -r choice </dev/tty
+  if [ -t 0 ]; then read -r choice </dev/tty; else read -r choice; fi
 
   case "$choice" in
     1) _recover_to_point ;;
@@ -84,7 +84,7 @@ _recover_to_point() {
   echo -e "  ${CYAN}3${RESET}) Hard reset (discard changes — irreversible)"
   printf "%b" "${YELLOW}?${RESET} Choose [1-3]: "
   local mode_choice
-  read -r mode_choice </dev/tty
+  if [ -t 0 ]; then read -r mode_choice </dev/tty; else read -r mode_choice; fi
 
   local mode="mixed"
   case "$mode_choice" in

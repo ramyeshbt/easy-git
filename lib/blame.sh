@@ -66,8 +66,8 @@ _format_blame() {
       current_date=$(date -d "@${BASH_REMATCH[1]}" '+%Y-%m-%d' 2>/dev/null \
                    || date -r "${BASH_REMATCH[1]}" '+%Y-%m-%d' 2>/dev/null \
                    || echo "unknown")
-    elif [[ "$line" =~ ^\t(.*)$ ]]; then
-      content="${BASH_REMATCH[1]}"
+    elif [[ "${line:0:1}" == $'\t' ]]; then
+      content="${line:1}"
       # Apply author filter
       if [ -z "$author_filter" ] || echo "$current_author" | grep -qi "$author_filter"; then
         printf "%b%-8s%b  %-10s  %-16s  %s\n" \
